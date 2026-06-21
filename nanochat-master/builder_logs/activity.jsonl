@@ -1,0 +1,8 @@
+{"ts": 1772856741.2107341, "kind": "server_ready", "message": "Builder server ready", "payload": {"port": 8000, "host": "0.0.0.0"}}
+{"ts": 1772856742.0169606, "kind": "sandbox_write", "message": "Wrote sandbox file activity/test.txt", "payload": {"path": "activity/test.txt", "size": 6}}
+{"ts": 1772856742.1966202, "kind": "server_shutdown", "message": "Builder server shutting down", "payload": {}}
+{"ts": 1781999093.06049, "kind": "server_ready", "message": "Builder server ready", "payload": {"port": 8000, "host": "0.0.0.0"}}
+{"ts": 1782000276.7773538, "kind": "server_ready", "message": "Builder server ready", "payload": {"port": 8000, "host": "0.0.0.0"}}
+{"ts": 1782000329.6382475, "kind": "server_ready", "message": "Builder server ready", "payload": {"port": 8000, "host": "0.0.0.0"}}
+{"ts": 1782000329.6382475, "kind": "server_shutdown", "message": "Builder server shutting down", "payload": {}}
+{"ts": 1782000592.3361654, "kind": "server_ready", "message": "Builder server ready", "payload": {"port": 8765, "host": "0.0.0.0"}}

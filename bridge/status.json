@@ -1,0 +1,26 @@
+{
+  "module_id": "llm_tweaker_builder",
+  "summary": "Design: Truth-First Teammate. Corpus train/val files: 0/0. Builder state: initial setup. Local runtime not ready. No jobs launched yet.",
+  "snapshot": "# LLM Tweaker Builder Snapshot\n\n- Base dir: C:\\Users\\User\\.cache\\nanochat\n- Corpus dir: C:\\Users\\User\\Desktop\\github_portal\\llm-tweaker\\chatty-cog\\modules\\llm-tweaker\\nanochat-master\\local_corpus\n- Assistant sandbox: C:\\Users\\User\\Desktop\\github_portal\\llm-tweaker\\chatty-cog\\modules\\llm-tweaker\\nanochat-master\\assistant_sandbox\n- Identity file ready: no\n- Tokenizer ready: no\n- Base checkpoint tags: 0\n- SFT checkpoint tags: 0\n- RL checkpoint tags: 0\n- Runtime ready: no\n- Latest job: none\n- Active design: Truth-First Teammate\n\n## Suggested next action\nFinish and publish the assistant identity design.\n\n## Key artifacts\n- builder_logs/activity.jsonl\n- Assistant_sandbox/\n- local_corpus/",
+  "event_type": "suspend_rundown",
+  "tags": [
+    "builder",
+    "training",
+    "local_only",
+    "webview"
+  ],
+  "payload": {
+    "base_tags": 0,
+    "design_name": "Truth-First Teammate",
+    "identity_exists": false,
+    "latest_job_label": null,
+    "latest_job_status": null,
+    "rl_tags": 0,
+    "runtime_ready": false,
+    "sft_tags": 0,
+    "tokenizer_ready": false,
+    "train_files": 0,
+    "val_files": 0
+  },
+  "updated_at_unix_ms": 1782000618136
+}

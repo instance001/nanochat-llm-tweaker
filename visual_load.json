@@ -1,0 +1,12 @@
+{
+  "kind": "webview",
+  "auto_launch": true,
+  "title": "LLM Tweaker Builder",
+  "url": "http://127.0.0.1:8765",
+  "notes": "Hosts the original local builder dashboard from the nested nanochat-master app.",
+  "serve": {
+    "program": "start-builder.cmd",
+    "cwd": "."
+  },
+  "serve_wait_ms": 3000
+}

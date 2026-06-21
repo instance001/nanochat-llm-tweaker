@@ -1,0 +1,65 @@
+{
+  "title": "LLM Tweaker Builder",
+  "description": "Bridge-side workspace for the hosted local builder. Use this to track stage, blockers, and next actions from ChattyCog.",
+  "sections": [
+    {
+      "id": "builder_status",
+      "title": "Builder Status",
+      "fields": ["current_stage", "active_design", "active_runtime_model", "next_action"]
+    },
+    {
+      "id": "notes",
+      "title": "Notes",
+      "fields": ["recent_changes", "open_questions", "important_artifacts"]
+    }
+  ],
+  "fields": [
+    {
+      "id": "current_stage",
+      "label": "Current stage",
+      "kind": "choice",
+      "options": ["Setup", "Design", "Tokenizer", "Base Train", "Chat SFT", "Chat RL", "Evaluation", "Conversation Lab"],
+      "section": "builder_status"
+    },
+    {
+      "id": "active_design",
+      "label": "Active design / preset",
+      "kind": "singleline",
+      "section": "builder_status"
+    },
+    {
+      "id": "active_runtime_model",
+      "label": "Active helper GGUF",
+      "kind": "singleline",
+      "section": "builder_status"
+    },
+    {
+      "id": "next_action",
+      "label": "Next action",
+      "kind": "multiline",
+      "rows": 3,
+      "section": "builder_status"
+    },
+    {
+      "id": "recent_changes",
+      "label": "Recent changes",
+      "kind": "multiline",
+      "rows": 5,
+      "section": "notes"
+    },
+    {
+      "id": "open_questions",
+      "label": "Open questions",
+      "kind": "multiline",
+      "rows": 4,
+      "section": "notes"
+    },
+    {
+      "id": "important_artifacts",
+      "label": "Important artifacts",
+      "kind": "multiline",
+      "rows": 4,
+      "section": "notes"
+    }
+  ]
+}

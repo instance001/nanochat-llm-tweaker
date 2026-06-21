@@ -1,0 +1,7 @@
+{
+  "module_id": "llm_tweaker_builder",
+  "display_name": "LLM Tweaker Builder",
+  "icon": "lab",
+  "description": "Hosted local builder dashboard for tokenizer training, base training, chat SFT, local runtime assistance, and evaluation workflows.",
+  "ai_enabled": false
+}

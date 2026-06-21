@@ -1,0 +1,2638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>NanoChat Builder</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4efe4;
+            --bg-deep: #e8dcc6;
+            --surface: rgba(255, 251, 244, 0.84);
+            --surface-strong: rgba(255, 248, 237, 0.95);
+            --ink: #1e1a16;
+            --muted: #64574a;
+            --accent: #0f6d6a;
+            --accent-soft: rgba(15, 109, 106, 0.12);
+            --signal: #b64b33;
+            --signal-soft: rgba(182, 75, 51, 0.12);
+            --line: rgba(47, 35, 24, 0.14);
+            --shadow: 0 20px 70px rgba(58, 40, 25, 0.12);
+            --radius-lg: 28px;
+            --radius-md: 18px;
+            --radius-sm: 12px;
+            --mono: "Consolas", "Courier New", monospace;
+            --body: "Aptos", "Trebuchet MS", sans-serif;
+            --display: "Rockwell", "Georgia", serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: var(--body);
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(182, 75, 51, 0.18), transparent 30%),
+                radial-gradient(circle at top right, rgba(15, 109, 106, 0.18), transparent 24%),
+                linear-gradient(180deg, #fbf6ed 0%, #efe3cf 42%, #e6d6bc 100%);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(30, 26, 22, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(30, 26, 22, 0.035) 1px, transparent 1px);
+            background-size: 34px 34px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 94%);
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .shell {
+            width: min(1440px, calc(100vw - 28px));
+            margin: 0 auto;
+            padding: 24px 0 96px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+            gap: 18px;
+            align-items: stretch;
+            margin-bottom: 18px;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+        }
+
+        .panel-inner {
+            padding: 22px;
+        }
+
+        .hero-copy {
+            position: relative;
+            min-height: 360px;
+            background:
+                linear-gradient(140deg, rgba(255, 251, 244, 0.78), rgba(255, 244, 226, 0.95)),
+                linear-gradient(120deg, transparent 52%, rgba(15, 109, 106, 0.1) 100%);
+        }
+
+        .hero-copy::after {
+            content: "";
+            position: absolute;
+            inset: auto -60px -80px auto;
+            width: 280px;
+            height: 280px;
+            border-radius: 32px;
+            border: 1px solid rgba(182, 75, 51, 0.22);
+            background:
+                linear-gradient(180deg, rgba(182, 75, 51, 0.1), rgba(15, 109, 106, 0.08)),
+                repeating-linear-gradient(135deg, rgba(30, 26, 22, 0.06) 0 8px, transparent 8px 16px);
+            transform: rotate(18deg);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.64);
+            border: 1px solid rgba(47, 35, 24, 0.1);
+            color: var(--muted);
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--signal);
+            box-shadow: 0 0 0 5px rgba(182, 75, 51, 0.12);
+        }
+
+        h1, h2, h3 {
+            margin: 0;
+            font-family: var(--display);
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .hero-title {
+            max-width: 16ch;
+            margin-top: 18px;
+            font-size: clamp(2.3rem, 4vw, 4.8rem);
+            line-height: 0.94;
+        }
+
+        .hero-subtitle {
+            max-width: 60ch;
+            margin-top: 18px;
+            font-size: 1.06rem;
+            line-height: 1.65;
+            color: var(--muted);
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 22px;
+        }
+
+        .status-board {
+            display: grid;
+            gap: 14px;
+        }
+
+        .status-card {
+            padding: 18px;
+            border-radius: 20px;
+            border: 1px solid var(--line);
+            background:
+                linear-gradient(180deg, rgba(255, 252, 246, 0.95), rgba(248, 239, 224, 0.92));
+        }
+
+        .status-label {
+            font-size: 0.78rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .status-value {
+            margin-top: 10px;
+            font-size: 1.6rem;
+            font-family: var(--display);
+        }
+
+        .status-note {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .section-kicker {
+            margin-bottom: 8px;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--signal);
+        }
+
+        .section-copy {
+            max-width: 60ch;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .badge-row,
+        .chip-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            padding: 8px 11px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(47, 35, 24, 0.1);
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .chip.good {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-color: rgba(15, 109, 106, 0.2);
+        }
+
+        .chip.warn {
+            background: var(--signal-soft);
+            color: var(--signal);
+            border-color: rgba(182, 75, 51, 0.2);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .mini-card {
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.7);
+            padding: 16px;
+            min-height: 130px;
+        }
+
+        .mini-card .number {
+            margin-top: 12px;
+            font-size: 1.8rem;
+            font-family: var(--display);
+        }
+
+        .mini-card .desc {
+            margin-top: 10px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .preset-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .preset-card {
+            padding: 16px;
+            border-radius: 20px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.72);
+            cursor: pointer;
+            transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+        }
+
+        .preset-card:hover,
+        .preset-card.active {
+            transform: translateY(-2px);
+            border-color: rgba(15, 109, 106, 0.32);
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        .preset-card h3 {
+            font-size: 1.2rem;
+        }
+
+        .preset-card p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 18px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-size: 0.88rem;
+            color: var(--muted);
+            letter-spacing: 0.02em;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            border: 1px solid rgba(47, 35, 24, 0.12);
+            background: rgba(255, 255, 255, 0.84);
+            color: var(--ink);
+            border-radius: 14px;
+            padding: 13px 14px;
+            font: inherit;
+            outline: none;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: rgba(15, 109, 106, 0.42);
+            box-shadow: 0 0 0 4px rgba(15, 109, 106, 0.1);
+            transform: translateY(-1px);
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        textarea.log-box {
+            min-height: 360px;
+            font-family: var(--mono);
+            font-size: 0.88rem;
+            line-height: 1.45;
+            background: #f5efe4;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            font: inherit;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-height: 46px;
+            padding: 0 18px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn.primary {
+            background: linear-gradient(135deg, #0f6d6a, #154c55);
+            color: #f8f7f2;
+        }
+
+        .btn.secondary {
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--ink);
+            border-color: rgba(47, 35, 24, 0.12);
+        }
+
+        .btn.signal {
+            background: linear-gradient(135deg, #b64b33, #7b3021);
+            color: #fff5ef;
+        }
+
+        .btn.ghost {
+            background: rgba(255, 255, 255, 0.42);
+            color: var(--muted);
+            border-color: rgba(47, 35, 24, 0.12);
+        }
+
+        .note-box {
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(47, 35, 24, 0.12);
+            background: rgba(255, 255, 255, 0.64);
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .pipeline {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .recipe-card {
+            display: grid;
+            gap: 16px;
+        }
+
+        .recipe-card .lead {
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .jobs-layout {
+            display: grid;
+            grid-template-columns: 360px minmax(0, 1fr);
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .jobs-list {
+            display: grid;
+            gap: 10px;
+            max-height: 560px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .job-card {
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.68);
+            cursor: pointer;
+            transition: transform 0.18s ease, border-color 0.18s ease;
+        }
+
+        .job-card:hover,
+        .job-card.active {
+            transform: translateY(-1px);
+            border-color: rgba(15, 109, 106, 0.28);
+        }
+
+        .job-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .job-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        .code-inline,
+        code {
+            font-family: var(--mono);
+        }
+
+        .command-preview {
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #efe6d7;
+            font-family: var(--mono);
+            font-size: 0.88rem;
+            line-height: 1.45;
+            overflow: auto;
+        }
+
+        .chat-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+            gap: 18px;
+        }
+
+        .chat-meta {
+            display: grid;
+            gap: 14px;
+        }
+
+        .messages {
+            min-height: 420px;
+            max-height: 560px;
+            overflow: auto;
+            display: grid;
+            gap: 12px;
+            padding-right: 4px;
+        }
+
+        .message {
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .message.user {
+            background: rgba(182, 75, 51, 0.12);
+            border-color: rgba(182, 75, 51, 0.16);
+        }
+
+        .message.assistant {
+            background: rgba(15, 109, 106, 0.1);
+            border-color: rgba(15, 109, 106, 0.16);
+        }
+
+        .message.system {
+            background: rgba(255, 255, 255, 0.74);
+        }
+
+        .message-role {
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .chat-compose {
+            display: grid;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .notice {
+            display: none;
+            margin-bottom: 16px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(47, 35, 24, 0.12);
+            background: rgba(255, 255, 255, 0.76);
+        }
+
+        .notice.show {
+            display: block;
+        }
+
+        .notice.good {
+            background: rgba(15, 109, 106, 0.12);
+            border-color: rgba(15, 109, 106, 0.18);
+        }
+
+        .notice.bad {
+            background: rgba(182, 75, 51, 0.12);
+            border-color: rgba(182, 75, 51, 0.18);
+        }
+
+        .footer-note {
+            margin-top: 12px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 1120px) {
+            .hero,
+            .top-grid,
+            .workspace,
+            .pipeline,
+            .jobs-layout,
+            .chat-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .card-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .shell {
+                width: min(100vw - 18px, 1440px);
+                padding-top: 10px;
+            }
+
+            .panel-inner {
+                padding: 18px;
+            }
+
+            .hero-copy {
+                min-height: auto;
+            }
+
+            .hero-title {
+                max-width: none;
+                font-size: clamp(2rem, 10vw, 3rem);
+            }
+
+            .form-grid,
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div id="notice" class="notice"></div>
+
+        <section class="hero">
+            <div class="panel hero-copy">
+                <div class="panel-inner">
+                    <div class="eyebrow">Exoskeleton Dashboard</div>
+                    <h1 class="hero-title">Build an LLM without memorizing the repo.</h1>
+                    <p class="hero-subtitle">
+                        This dashboard wraps nanochat into a guided local builder. Design the assistant's behavior,
+                        publish identity data, point every training stage at local files, inspect logs, and test the result
+                        without cloud calls.
+                    </p>
+                    <div class="hero-actions">
+                        <button class="btn primary" id="applyTruthPresetBtn">Use Truth-First Preset</button>
+                        <button class="btn secondary" id="refreshBtn">Refresh State</button>
+                        <a class="btn ghost" href="/chat" target="_blank" rel="noopener">Open Minimal Chat View</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-board">
+                <div class="panel">
+                    <div class="panel-inner">
+                        <div class="status-card">
+                            <div class="status-label">Workspace</div>
+                            <div class="status-value" id="repoRootValue">Loading...</div>
+                            <div class="status-note" id="baseDirValue"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-inner">
+                        <div class="status-card">
+                            <div class="status-label">Chat Runtime</div>
+                            <div class="status-value" id="chatRuntimeValue">Waiting</div>
+                            <div class="status-note" id="chatRuntimeNote"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-inner">
+                        <div class="status-card">
+                            <div class="status-label">Recommended Flow</div>
+                            <div class="status-note">
+                                1. Pick a preset and save a design. 2. Publish the identity dataset. 3. Place local corpus files and train a tokenizer.
+                                4. Run base training. 5. Use assistant_sandbox to draft local SFT JSONL files. 6. Run chat SFT. 7. Test the result below.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="top-grid">
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">State</div>
+                            <h2>Builder Snapshot</h2>
+                        </div>
+                        <div class="badge-row" id="deviceChips"></div>
+                    </div>
+                    <div class="card-grid">
+                        <div class="mini-card">
+                            <div class="status-label">Local Corpus Files</div>
+                            <div class="number" id="datasetShardCount">0</div>
+                            <div class="desc">Train-split files found under the local corpus directory.</div>
+                        </div>
+                        <div class="mini-card">
+                            <div class="status-label">Tokenizer</div>
+                            <div class="number" id="tokenizerStatus">No</div>
+                            <div class="desc">Whether a tokenizer is already present in the cache.</div>
+                        </div>
+                        <div class="mini-card">
+                            <div class="status-label">Identity Data</div>
+                            <div class="number" id="identityStatus">No</div>
+                            <div class="desc">Whether the active identity conversation file exists.</div>
+                        </div>
+                        <div class="mini-card">
+                            <div class="status-label">Checkpoints</div>
+                            <div class="number" id="checkpointStatus">0</div>
+                            <div class="desc">Total checkpoint families across base, SFT, and RL.</div>
+                        </div>
+                    </div>
+                    <div class="footer-note" id="checkpointSummary"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Presets</div>
+                            <h2>Starting Blueprints</h2>
+                            <div class="section-copy">
+                                Presets fill in both the design voice and the training forms. They are intended as starting points,
+                                not magic defaults.
+                            </div>
+                        </div>
+                    </div>
+                    <div id="presetList" class="preset-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Design</div>
+                            <h2>Assistant Studio</h2>
+                            <div class="section-copy">
+                                This defines the assistant's identity and how it should behave under uncertainty. Saving the design
+                                also regenerates a starter identity dataset.
+                            </div>
+                        </div>
+                        <div class="chip-row" id="designSelectRow"></div>
+                    </div>
+
+                    <form id="designForm" class="form-grid">
+                        <div class="field">
+                            <label for="designName">Assistant Name</label>
+                            <input id="designName" name="name" type="text" placeholder="Truth-First Teammate">
+                        </div>
+                        <div class="field">
+                            <label for="designTone">Tone</label>
+                            <input id="designTone" name="tone" type="text" placeholder="Direct, calm, and practical.">
+                        </div>
+                        <div class="field full">
+                            <label for="designMission">Mission</label>
+                            <textarea id="designMission" name="mission" placeholder="What is this assistant optimized for?"></textarea>
+                        </div>
+                        <div class="field full">
+                            <label for="designTeamRole">Team Role</label>
+                            <textarea id="designTeamRole" name="team_role" placeholder="Describe the assistant as a member of the user's team."></textarea>
+                        </div>
+                        <div class="field full">
+                            <label for="designUncertainty">Uncertainty Policy</label>
+                            <textarea id="designUncertainty" name="uncertainty_policy" placeholder="How should it act when confidence is low?"></textarea>
+                        </div>
+                        <div class="field full">
+                            <label for="designCollaboration">Collaboration Policy</label>
+                            <textarea id="designCollaboration" name="collaboration_policy" placeholder="How should it work with humans, tools, and other agents?"></textarea>
+                        </div>
+                        <div class="field full">
+                            <label for="designGuardrails">Guardrails (one per line)</label>
+                            <textarea id="designGuardrails" placeholder="Admit uncertainty instead of inventing details."></textarea>
+                        </div>
+                        <div class="field full">
+                            <label for="designNotes">Custom Notes</label>
+                            <textarea id="designNotes" name="custom_notes" placeholder="Optional notes for future dataset expansion."></textarea>
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" id="saveDesignBtn">Save Design</button>
+                        <button class="btn signal" id="publishDesignBtn">Publish as Active Identity File</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stack">
+                <div class="panel">
+                    <div class="panel-inner">
+                        <div class="section-head">
+                            <div>
+                                <div class="section-kicker">Identity</div>
+                                <h2>Generated Dataset Preview</h2>
+                            </div>
+                        </div>
+                        <textarea id="identityPreview" readonly></textarea>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-inner">
+                        <div class="section-head">
+                            <div>
+                                <div class="section-kicker">Paths</div>
+                                <h2>Where Builder Files Live</h2>
+                            </div>
+                        </div>
+                        <div class="note-box">
+                            <div><strong>Cache:</strong> <span id="pathBaseDir"></span></div>
+                            <div style="margin-top: 8px;"><strong>Tokenizer:</strong> <span id="pathTokenizer"></span></div>
+                            <div style="margin-top: 8px;"><strong>Identity:</strong> <span id="pathIdentity"></span></div>
+                            <div style="margin-top: 8px;"><strong>Local Corpus:</strong> <span id="pathDataset"></span></div>
+                            <div style="margin-top: 8px;"><strong>Assistant Sandbox:</strong> <span id="pathSandbox"></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pipeline">
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 1</div>
+                        <h2>Local Corpus + Tokenizer</h2>
+                        <p class="lead">
+                            Place local text, code, JSON, JSONL, or parquet files under the corpus folder, then train the tokenizer from that local data only.
+                        </p>
+                    </div>
+
+                    <form id="tokenizerForm" class="form-grid">
+                        <div class="field full">
+                            <label for="tokenizerCorpusDir">Corpus Directory</label>
+                            <input id="tokenizerCorpusDir" name="corpus_dir" type="text" placeholder="C:\path\to\local_corpus">
+                        </div>
+                        <div class="field">
+                            <label for="tokenizerMaxChars">Max Characters</label>
+                            <input id="tokenizerMaxChars" name="max_chars" data-cast="int" type="number" min="1000" step="1000" value="250000000">
+                        </div>
+                        <div class="field">
+                            <label for="tokenizerDocCap">Document Cap</label>
+                            <input id="tokenizerDocCap" name="doc_cap" data-cast="int" type="number" min="100" value="10000">
+                        </div>
+                        <div class="field">
+                            <label for="tokenizerVocab">Vocab Size</label>
+                            <input id="tokenizerVocab" name="vocab_size" data-cast="int" type="number" min="1024" step="512" value="32768">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" data-job="tokenizer_train" data-form="tokenizerForm">Train Tokenizer</button>
+                        <button class="btn ghost" data-job="tokenizer_eval" data-form="tokenizerForm">Run Tokenizer Eval</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 2</div>
+                        <h2>Base Model Training</h2>
+                        <p class="lead">
+                            This trains the underlying language model from the same local corpus. No benchmark downloads or cloud logging are used in this path.
+                        </p>
+                    </div>
+
+                    <form id="baseTrainForm" class="form-grid">
+                        <div class="field full">
+                            <label for="baseCorpusDir">Corpus Directory</label>
+                            <input id="baseCorpusDir" name="corpus_dir" type="text" placeholder="C:\path\to\local_corpus">
+                        </div>
+                        <div class="field">
+                            <label for="baseDepth">Depth</label>
+                            <input id="baseDepth" name="depth" data-cast="int" type="number" min="2" value="6">
+                        </div>
+                        <div class="field">
+                            <label for="baseHeadDim">Head Dim</label>
+                            <input id="baseHeadDim" name="head_dim" data-cast="int" type="number" min="32" step="32" value="64">
+                        </div>
+                        <div class="field">
+                            <label for="baseSeqLen">Max Sequence Length</label>
+                            <input id="baseSeqLen" name="max_seq_len" data-cast="int" type="number" min="64" step="64" value="512">
+                        </div>
+                        <div class="field">
+                            <label for="baseWindowPattern">Window Pattern</label>
+                            <input id="baseWindowPattern" name="window_pattern" type="text" value="L">
+                        </div>
+                        <div class="field">
+                            <label for="baseDeviceBatch">Device Batch Size</label>
+                            <input id="baseDeviceBatch" name="device_batch_size" data-cast="int" type="number" min="1" value="8">
+                        </div>
+                        <div class="field">
+                            <label for="baseTotalBatch">Total Batch Size</label>
+                            <input id="baseTotalBatch" name="total_batch_size" data-cast="int" type="number" min="1" value="8192">
+                        </div>
+                        <div class="field">
+                            <label for="baseIterations">Iterations</label>
+                            <input id="baseIterations" name="num_iterations" data-cast="int" type="number" min="1" value="1200">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalEvery">Eval Every</label>
+                            <input id="baseEvalEvery" name="eval_every" data-cast="int" type="number" value="100">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalTokens">Eval Tokens</label>
+                            <input id="baseEvalTokens" name="eval_tokens" data-cast="int" type="number" value="262144">
+                        </div>
+                        <div class="field">
+                            <label for="baseCoreEvery">Core Metric Every</label>
+                            <input id="baseCoreEvery" name="core_metric_every" data-cast="int" type="number" value="-1">
+                        </div>
+                        <div class="field">
+                            <label for="baseSampleEvery">Sample Every</label>
+                            <input id="baseSampleEvery" name="sample_every" data-cast="int" type="number" value="100">
+                        </div>
+                        <div class="field">
+                            <label for="baseDeviceType">Device Type</label>
+                            <select id="baseDeviceType" name="device_type">
+                                <option value="cpu">cpu</option>
+                                <option value="cuda">cuda</option>
+                                <option value="mps">mps</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="baseRunName">Run Name</label>
+                            <input id="baseRunName" name="run" type="text" value="builder-base">
+                        </div>
+                        <div class="field">
+                            <label for="baseTag">Model Tag (optional)</label>
+                            <input id="baseTag" name="model_tag" type="text" placeholder="d6-truth-first">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" data-job="base_train" data-form="baseTrainForm">Launch Base Training</button>
+                        <button class="btn secondary" data-job="base_eval" data-form="baseEvalForm">Run Base Eval</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pipeline">
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 3</div>
+                        <h2>Chat Fine-Tuning</h2>
+                        <p class="lead">
+                            This stage uses only local JSONL conversation files. Publish your identity file, draft extra conversations inside assistant_sandbox, and point SFT at those local files.
+                        </p>
+                    </div>
+
+                    <form id="chatSftForm" class="form-grid">
+                        <div class="field">
+                            <label for="sftModelTag">Base Model Tag (optional)</label>
+                            <input id="sftModelTag" name="model_tag" type="text" placeholder="Leave blank for latest">
+                        </div>
+                        <div class="field">
+                            <label for="sftModelStep">Base Model Step (optional)</label>
+                            <input id="sftModelStep" name="model_step" data-cast="int" type="number" min="1" placeholder="Last step by default">
+                        </div>
+                        <div class="field full">
+                            <label for="sftTrainFiles">Train JSONL Files</label>
+                            <input id="sftTrainFiles" name="train_files" type="text" placeholder="C:\path\to\chat_train.jsonl;C:\path\to\extra.jsonl">
+                        </div>
+                        <div class="field full">
+                            <label for="sftValFiles">Validation JSONL Files</label>
+                            <input id="sftValFiles" name="val_files" type="text" placeholder="C:\path\to\chat_val.jsonl">
+                        </div>
+                        <div class="field">
+                            <label for="sftIncludeIdentity">Include Published Identity</label>
+                            <select id="sftIncludeIdentity" name="include_identity" data-cast="int">
+                                <option value="1">yes</option>
+                                <option value="0">no</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="sftIdentityRepeats">Identity Repeats</label>
+                            <input id="sftIdentityRepeats" name="identity_repeats" data-cast="int" type="number" min="1" value="2">
+                        </div>
+                        <div class="field">
+                            <label for="sftSeqLen">Max Sequence Length</label>
+                            <input id="sftSeqLen" name="max_seq_len" data-cast="int" type="number" min="64" step="64" value="512">
+                        </div>
+                        <div class="field">
+                            <label for="sftDeviceBatch">Device Batch Size</label>
+                            <input id="sftDeviceBatch" name="device_batch_size" data-cast="int" type="number" min="1" value="8">
+                        </div>
+                        <div class="field">
+                            <label for="sftTotalBatch">Total Batch Size</label>
+                            <input id="sftTotalBatch" name="total_batch_size" data-cast="int" type="number" min="1" value="8192">
+                        </div>
+                        <div class="field">
+                            <label for="sftIterations">Iterations</label>
+                            <input id="sftIterations" name="num_iterations" data-cast="int" type="number" min="1" value="900">
+                        </div>
+                        <div class="field">
+                            <label for="sftEvalEvery">Eval Every</label>
+                            <input id="sftEvalEvery" name="eval_every" data-cast="int" type="number" value="150">
+                        </div>
+                        <div class="field">
+                            <label for="sftEvalTokens">Eval Tokens</label>
+                            <input id="sftEvalTokens" name="eval_tokens" data-cast="int" type="number" value="262144">
+                        </div>
+                        <div class="field">
+                            <label for="sftDeviceType">Device Type</label>
+                            <select id="sftDeviceType" name="device_type">
+                                <option value="cpu">cpu</option>
+                                <option value="cuda">cuda</option>
+                                <option value="mps">mps</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="sftRunName">Run Name</label>
+                            <input id="sftRunName" name="run" type="text" value="builder-sft">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" data-job="chat_sft" data-form="chatSftForm">Launch Chat SFT</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 4</div>
+                        <h2>Benchmark + Smoke Test</h2>
+                        <p class="lead">
+                            Keep evaluation short while iterating. This local-only check measures BPB on your corpus and samples from the checkpoint, and the benchmark button keeps that config stable so results are easier to compare across runs.
+                        </p>
+                    </div>
+
+                    <form id="baseEvalForm" class="form-grid">
+                        <div class="field">
+                            <label for="baseEvalTag">Base Model Tag</label>
+                            <input id="baseEvalTag" name="model_tag" type="text" placeholder="Leave blank for latest">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalStep">Step (optional)</label>
+                            <input id="baseEvalStep" name="step" data-cast="int" type="number" min="1">
+                        </div>
+                        <div class="field full">
+                            <label for="baseEvalCorpusDir">Corpus Directory</label>
+                            <input id="baseEvalCorpusDir" name="corpus_dir" type="text" placeholder="C:\path\to\local_corpus">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalModes">Eval Modes</label>
+                            <input id="baseEvalModes" name="eval" type="text" value="bpb,sample">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalBatch">Device Batch Size</label>
+                            <input id="baseEvalBatch" name="device_batch_size" data-cast="int" type="number" min="1" value="4">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalSplit">Split Tokens</label>
+                            <input id="baseEvalSplit" name="split_tokens" data-cast="int" type="number" value="131072">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalMaxPerTask">Max Per Task</label>
+                            <input id="baseEvalMaxPerTask" name="max_per_task" data-cast="int" type="number" value="64">
+                        </div>
+                        <div class="field">
+                            <label for="baseEvalDeviceType">Device Type</label>
+                            <select id="baseEvalDeviceType" name="device_type">
+                                <option value="cpu">cpu</option>
+                                <option value="cuda">cuda</option>
+                                <option value="mps">mps</option>
+                            </select>
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn secondary" data-job="base_eval" data-form="baseEvalForm">Run Base Eval</button>
+                        <button class="btn primary" data-job="benchmark_eval" data-form="baseEvalForm">Run Benchmark</button>
+                        <button class="btn ghost" id="autoTuneBtn">Auto Tune Next Run</button>
+                    </div>
+                    <div class="note-box" id="benchmarkSummary" style="margin-top: 12px;">No benchmark history yet. Run a benchmark after a training pass to compare outcomes.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="jobs-layout">
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Runs</div>
+                            <h2>Job Queue</h2>
+                            <div class="section-copy">Every long-running command launched from the dashboard appears here.</div>
+                        </div>
+                    </div>
+                    <div id="jobsList" class="jobs-list"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Logs</div>
+                            <h2>Selected Job</h2>
+                        </div>
+                        <div class="button-row">
+                            <button class="btn secondary" id="refreshJobBtn">Refresh Job</button>
+                            <button class="btn signal" id="stopJobBtn">Stop Job</button>
+                        </div>
+                    </div>
+                    <div class="note-box" id="jobSummary">Select a job to inspect its command and logs.</div>
+                    <div class="command-preview" id="jobCommandPreview" style="margin-top: 12px;">No job selected.</div>
+                    <textarea id="jobLogs" class="log-box" readonly style="margin-top: 12px;"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="chat-shell">
+            <div class="panel">
+                <div class="panel-inner chat-meta">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Chat Runtime</div>
+                            <h2>Load a Model to Test</h2>
+                            <div class="section-copy">
+                                The dashboard can start without any chat checkpoint. Once you have an SFT or RL model,
+                                load it here and the test bench on the right will use it.
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="chatLoadForm" class="form-grid">
+                        <div class="field">
+                            <label for="chatLoadSource">Source</label>
+                            <select id="chatLoadSource" name="source">
+                                <option value="sft">sft</option>
+                                <option value="rl">rl</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="chatLoadTag">Model Tag (optional)</label>
+                            <input id="chatLoadTag" name="model_tag" type="text" placeholder="Leave blank for latest">
+                        </div>
+                        <div class="field">
+                            <label for="chatLoadStep">Step (optional)</label>
+                            <input id="chatLoadStep" name="step" data-cast="int" type="number" min="1">
+                        </div>
+                        <div class="field">
+                            <label for="chatLoadNumGpus">Worker Count</label>
+                            <input id="chatLoadNumGpus" name="num_gpus" data-cast="int" type="number" min="1" value="1">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" id="loadChatBtn">Load Chat Model</button>
+                        <button class="btn ghost" id="latestSftBtn">Load Latest SFT</button>
+                    </div>
+
+                    <div class="note-box" id="chatStatusBox">Chat runtime status will appear here.</div>
+
+                    <div class="section-head" style="margin-top: 10px;">
+                        <div>
+                            <div class="section-kicker">Local Runtime</div>
+                            <h2>Managed llama.cpp Server</h2>
+                            <div class="section-copy">
+                                This uses the bundled Windows runtime in <code>runtime/windows</code>. It will try Vulkan first when you choose
+                                <code>auto</code>, then fall back to CPU if the server never becomes healthy.
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="runtimeForm" class="form-grid">
+                        <div class="field full">
+                            <label for="runtimeModelSelect">Detected Assistant Models</label>
+                            <select id="runtimeModelSelect">
+                                <option value="">No local GGUF models detected yet</option>
+                            </select>
+                            <div class="footer-note" id="runtimeModelMeta">Pick a detected GGUF model here, or type a custom path below.</div>
+                        </div>
+                        <div class="field full">
+                            <label for="runtimeModelPath">Model Path (.gguf)</label>
+                            <input id="runtimeModelPath" name="model_path" type="text" list="runtimeModelOptions" placeholder="C:\path\to\model.gguf">
+                            <datalist id="runtimeModelOptions"></datalist>
+                        </div>
+                        <div class="field">
+                            <label for="runtimeDeviceStrategy">Device Strategy</label>
+                            <select id="runtimeDeviceStrategy" name="device_strategy">
+                                <option value="auto">auto (GPU then CPU)</option>
+                                <option value="gpu">gpu only</option>
+                                <option value="cpu">cpu only</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="runtimePreferredDevice">Preferred Device</label>
+                            <select id="runtimePreferredDevice" name="preferred_device">
+                                <option value="">First available</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="runtimeAlias">Alias</label>
+                            <input id="runtimeAlias" name="alias" type="text" value="local-runtime">
+                        </div>
+                        <div class="field">
+                            <label for="runtimePort">Port</label>
+                            <input id="runtimePort" name="port" data-cast="int" type="number" min="1" value="8091">
+                        </div>
+                        <div class="field">
+                            <label for="runtimeCtxSize">Context Size</label>
+                            <input id="runtimeCtxSize" name="ctx_size" data-cast="int" type="number" min="256" step="256" value="4096">
+                        </div>
+                        <div class="field">
+                            <label for="runtimeThreads">Threads</label>
+                            <input id="runtimeThreads" name="threads" data-cast="int" type="number" min="1" value="8">
+                        </div>
+                        <div class="field">
+                            <label for="runtimeThreadsHttp">HTTP Threads</label>
+                            <input id="runtimeThreadsHttp" name="threads_http" data-cast="int" type="number" min="1" value="4">
+                        </div>
+                        <div class="field">
+                            <label for="runtimeParallel">Parallel Slots</label>
+                            <input id="runtimeParallel" name="parallel" data-cast="int" type="number" min="1" value="2">
+                        </div>
+                        <div class="field">
+                            <label for="runtimeGpuLayers">GPU Layers</label>
+                            <input id="runtimeGpuLayers" name="gpu_layers" type="text" value="auto">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" id="startRuntimeBtn">Start Local Runtime</button>
+                        <button class="btn signal" id="stopRuntimeBtn">Stop Local Runtime</button>
+                    </div>
+
+                    <div class="note-box" id="runtimeStatusBox">Local runtime status will appear here.</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Test Bench</div>
+                            <h2>Conversation Lab</h2>
+                            <div class="section-copy">
+                                Use this to pressure-test the assistant. Each local-runtime request includes recent process logs, builder state, and any selected sandbox or corpus file. With Assistant Actions enabled, it can draft validated SFT JSONL rows, review corpus files, and help build the missing local data.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid" style="margin-bottom: 16px;">
+                        <div class="field">
+                            <label for="chatProvider">Chat Provider</label>
+                            <select id="chatProvider">
+                                <option value="local_runtime">local runtime assistant</option>
+                                <option value="internal_nanochat">internal nanochat</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="assistantToolsEnabled">Assistant Actions</label>
+                            <select id="assistantToolsEnabled">
+                                <option value="1">enabled</option>
+                                <option value="0">disabled</option>
+                            </select>
+                        </div>
+                        <div class="field full">
+                            <label for="runtimeSystemPrompt">Local Assistant System Prompt</label>
+                            <textarea id="runtimeSystemPrompt">You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.</textarea>
+                        </div>
+                    </div>
+
+                    <div id="chatMessages" class="messages"></div>
+
+                    <div class="chat-compose">
+                        <textarea id="chatInput" placeholder="Ask the assistant to explain a tradeoff, admit uncertainty, draft SFT JSONL, or help create corpus files under local_corpus/train or local_corpus/val."></textarea>
+                        <div class="button-row">
+                            <button class="btn primary" id="sendChatBtn">Send</button>
+                            <button class="btn secondary" id="clearChatBtn">Clear</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="jobs-layout" style="margin-top: 18px;">
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Sandbox</div>
+                            <h2>assistant_sandbox Files</h2>
+                            <div class="section-copy">
+                                The local assistant only sees sandbox files you explicitly include in chat. Use this area for drafts, SFT files, notes, and scratch work before or alongside publishing things into the corpus.
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sandboxFiles" class="jobs-list"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Drafting</div>
+                            <h2>Sandbox Editor</h2>
+                        </div>
+                        <div class="button-row">
+                            <button class="btn secondary" id="refreshSandboxBtn">Refresh Files</button>
+                            <button class="btn ghost" id="newSandboxFileBtn">New File</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="field full">
+                            <label for="sandboxPath">Sandbox Path</label>
+                            <input id="sandboxPath" type="text" placeholder="chat_train.jsonl">
+                        </div>
+                    </div>
+                    <div class="note-box" id="sandboxMeta" style="margin-top: 12px;">Select a file from the left or create a new one here.</div>
+                    <textarea id="sandboxEditor" class="log-box" style="margin-top: 12px;" placeholder="Draft local JSONL, notes, prompts, or templates here."></textarea>
+                    <div class="button-row" style="margin-top: 12px;">
+                        <button class="btn primary" id="saveSandboxBtn">Save File</button>
+                        <button class="btn secondary" id="loadSandboxBtn">Load File</button>
+                        <button class="btn signal" id="deleteSandboxBtn">Delete File</button>
+                        <button class="btn ghost" id="saveReplyToSandboxBtn">Save Last Assistant Reply</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="jobs-layout" style="margin-top: 18px;">
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Corpus</div>
+                            <h2>local_corpus Files</h2>
+                            <div class="section-copy">
+                                This is the local corpus used for tokenizer training and base model training. The assistant can review selected corpus files in chat and can help draft or update them through local actions.
+                            </div>
+                        </div>
+                    </div>
+                    <div id="corpusFiles" class="jobs-list"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner">
+                    <div class="section-head">
+                        <div>
+                            <div class="section-kicker">Corpus Editing</div>
+                            <h2>Corpus Editor</h2>
+                        </div>
+                        <div class="button-row">
+                            <button class="btn secondary" id="refreshCorpusBtn">Refresh Files</button>
+                            <button class="btn ghost" id="newCorpusFileBtn">New File</button>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="field full">
+                            <label for="corpusPath">Corpus Path</label>
+                            <input id="corpusPath" type="text" placeholder="train/reference.txt">
+                        </div>
+                    </div>
+                    <div class="note-box" id="corpusMeta" style="margin-top: 12px;">Select a corpus file from the left or create a new one here.</div>
+                    <textarea id="corpusEditor" class="log-box" style="margin-top: 12px;" placeholder="Draft local text, JSON, or JSONL corpus content here."></textarea>
+                    <div class="button-row" style="margin-top: 12px;">
+                        <button class="btn primary" id="saveCorpusBtn">Save File</button>
+                        <button class="btn secondary" id="loadCorpusBtn">Load File</button>
+                        <button class="btn signal" id="deleteCorpusBtn">Delete File</button>
+                        <button class="btn ghost" id="copySandboxToCorpusBtn">Copy Sandbox To Corpus</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" style="margin-top: 18px;">
+            <div class="panel-inner">
+                <div class="section-head">
+                    <div>
+                        <div class="section-kicker">Activity</div>
+                        <h2>Process Log</h2>
+                        <div class="section-copy">
+                            Recent job output, sandbox and corpus file activity, runtime events, and chat turns. The local assistant receives a compact tail of this log on each chat request.
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn secondary" id="refreshActivityBtn">Refresh Activity</button>
+                    </div>
+                </div>
+                <div class="note-box" id="activityMeta">No activity yet.</div>
+                <textarea id="activityLog" class="log-box" readonly style="margin-top: 12px;"></textarea>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const state = {
+            bootstrap: null,
+            selectedPreset: null,
+            selectedDesignSlug: null,
+            selectedJobId: null,
+            selectedJob: null,
+            selectedSandboxPath: "",
+            selectedCorpusPath: "",
+            chatMessages: [],
+            pollingHandle: null,
+            isSendingChat: false,
+            designDirty: false,
+            forceDesignPopulate: true,
+            lastAssistantReply: "",
+        };
+
+        const noticeEl = document.getElementById("notice");
+        const presetListEl = document.getElementById("presetList");
+        const designSelectRowEl = document.getElementById("designSelectRow");
+        const identityPreviewEl = document.getElementById("identityPreview");
+        const jobsListEl = document.getElementById("jobsList");
+        const jobSummaryEl = document.getElementById("jobSummary");
+        const jobCommandPreviewEl = document.getElementById("jobCommandPreview");
+        const jobLogsEl = document.getElementById("jobLogs");
+        const chatMessagesEl = document.getElementById("chatMessages");
+        const chatInputEl = document.getElementById("chatInput");
+        const chatStatusBoxEl = document.getElementById("chatStatusBox");
+        const runtimeStatusBoxEl = document.getElementById("runtimeStatusBox");
+        const runtimeModelSelectEl = document.getElementById("runtimeModelSelect");
+        const runtimeModelMetaEl = document.getElementById("runtimeModelMeta");
+        const runtimeModelOptionsEl = document.getElementById("runtimeModelOptions");
+        const runtimePreferredDeviceEl = document.getElementById("runtimePreferredDevice");
+        const chatProviderEl = document.getElementById("chatProvider");
+        const assistantToolsEnabledEl = document.getElementById("assistantToolsEnabled");
+        const runtimeSystemPromptEl = document.getElementById("runtimeSystemPrompt");
+        const sandboxFilesEl = document.getElementById("sandboxFiles");
+        const sandboxPathEl = document.getElementById("sandboxPath");
+        const sandboxEditorEl = document.getElementById("sandboxEditor");
+        const sandboxMetaEl = document.getElementById("sandboxMeta");
+        const corpusFilesEl = document.getElementById("corpusFiles");
+        const corpusPathEl = document.getElementById("corpusPath");
+        const corpusEditorEl = document.getElementById("corpusEditor");
+        const corpusMetaEl = document.getElementById("corpusMeta");
+        const benchmarkSummaryEl = document.getElementById("benchmarkSummary");
+        const activityMetaEl = document.getElementById("activityMeta");
+        const activityLogEl = document.getElementById("activityLog");
+
+        function showNotice(message, kind = "good") {
+            noticeEl.textContent = message;
+            noticeEl.className = `notice show ${kind}`;
+            window.clearTimeout(showNotice._timer);
+            showNotice._timer = window.setTimeout(() => {
+                noticeEl.className = "notice";
+                noticeEl.textContent = "";
+            }, 4200);
+        }
+
+        async function api(path, options = {}) {
+            const finalOptions = { ...options };
+            if (finalOptions.body && typeof finalOptions.body !== "string") {
+                finalOptions.body = JSON.stringify(finalOptions.body);
+            }
+            finalOptions.headers = {
+                "Content-Type": "application/json",
+                ...(finalOptions.headers || {}),
+            };
+            const response = await fetch(path, finalOptions);
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                payload = null;
+            }
+            if (!response.ok) {
+                const detail = payload && payload.detail ? payload.detail : `Request failed: ${response.status}`;
+                throw new Error(detail);
+            }
+            return payload;
+        }
+
+        function formatTimestamp(seconds) {
+            if (!seconds) return "Unknown";
+            return new Date(seconds * 1000).toLocaleString();
+        }
+
+        function formatBytes(bytes) {
+            if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+            const units = ["B", "KB", "MB", "GB", "TB"];
+            let value = bytes;
+            let unitIndex = 0;
+            while (value >= 1024 && unitIndex < units.length - 1) {
+                value /= 1024;
+                unitIndex += 1;
+            }
+            const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+            return `${value.toFixed(digits)} ${units[unitIndex]}`;
+        }
+
+        function findRuntimeModel(runtime, pathValue) {
+            if (!runtime || !pathValue) return null;
+            return (runtime.bundle.models || []).find((model) => model.path === pathValue) || null;
+        }
+
+        function updateRuntimeModelMeta(runtime, pathValue = "") {
+            const selectedPath = (pathValue || "").trim();
+            const selectedModel = findRuntimeModel(runtime, selectedPath);
+            const recommendedPath = runtime && runtime.bundle.recommended_model ? runtime.bundle.recommended_model.path : "";
+            const activePath = runtime && runtime.config ? runtime.config.model_path || "" : "";
+
+            if (!runtime || !(runtime.bundle.models || []).length) {
+                runtimeModelMetaEl.textContent = "No GGUF models detected in assistant_models, models, or runtime/models yet.";
+                return;
+            }
+
+            if (!selectedPath) {
+                runtimeModelMetaEl.textContent = "Pick a detected GGUF model here, or type a custom path below.";
+                return;
+            }
+
+            if (!selectedModel) {
+                runtimeModelMetaEl.textContent = `Manual path selected: ${selectedPath}`;
+                return;
+            }
+
+            const notes = [
+                selectedModel.name,
+                formatBytes(selectedModel.size),
+                `updated ${formatTimestamp(selectedModel.updated_at)}`,
+            ];
+            if (selectedPath === recommendedPath) notes.push("recommended");
+            if (selectedPath === activePath) notes.push("active");
+            runtimeModelMetaEl.textContent = notes.join(" | ");
+        }
+
+        function syncRuntimeModelSelector(runtime) {
+            if (!runtime) return;
+            const runtimeModelPathEl = document.getElementById("runtimeModelPath");
+            const models = runtime.bundle.models || [];
+            const recommendedPath = runtime.bundle.recommended_model ? runtime.bundle.recommended_model.path : "";
+            const activePath = runtime.config && runtime.config.model_path ? runtime.config.model_path : "";
+            const currentPath = runtimeModelPathEl.value.trim();
+            const selectedPath = currentPath || activePath || recommendedPath || (models[0] ? models[0].path : "");
+            const matchedModel = models.find((model) => model.path === selectedPath) || null;
+
+            runtimeModelSelectEl.innerHTML = "";
+            if (!models.length) {
+                runtimeModelSelectEl.innerHTML = `<option value="">No local GGUF models detected yet</option>`;
+                runtimeModelSelectEl.value = "";
+                updateRuntimeModelMeta(runtime, "");
+                return;
+            }
+
+            models.forEach((model) => {
+                const option = document.createElement("option");
+                option.value = model.path;
+                const tags = [];
+                if (model.path === recommendedPath) tags.push("recommended");
+                if (model.path === activePath) tags.push("active");
+                const suffix = tags.length ? ` [${tags.join(", ")}]` : "";
+                option.textContent = `${model.name} (${formatBytes(model.size)})${suffix}`;
+                runtimeModelSelectEl.appendChild(option);
+            });
+
+            if (!currentPath) {
+                runtimeModelPathEl.value = selectedPath;
+            }
+
+            if (matchedModel) {
+                runtimeModelSelectEl.value = matchedModel.path;
+            } else {
+                const customOption = document.createElement("option");
+                customOption.value = "__custom__";
+                customOption.textContent = "Custom / manual path";
+                runtimeModelSelectEl.appendChild(customOption);
+                runtimeModelSelectEl.value = "__custom__";
+            }
+
+            updateRuntimeModelMeta(runtime, runtimeModelPathEl.value);
+        }
+
+        function setText(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
+        function serializeForm(formId) {
+            const form = document.getElementById(formId);
+            const payload = {};
+            if (!form) return payload;
+            form.querySelectorAll("[name]").forEach((field) => {
+                const raw = field.value.trim();
+                if (raw === "") {
+                    payload[field.name] = "";
+                    return;
+                }
+                const cast = field.dataset.cast || "";
+                if (cast === "int") {
+                    payload[field.name] = Number.parseInt(raw, 10);
+                } else if (cast === "float") {
+                    payload[field.name] = Number.parseFloat(raw);
+                } else {
+                    payload[field.name] = raw;
+                }
+            });
+            return payload;
+        }
+
+        function fillForm(formId, values) {
+            const form = document.getElementById(formId);
+            if (!form || !values) return;
+            Object.entries(values).forEach(([key, value]) => {
+                const field = form.querySelector(`[name="${key}"]`);
+                if (!field) return;
+                field.value = value ?? "";
+            });
+        }
+
+        function cleanOptionalPayload(payload) {
+            const cleaned = {};
+            Object.entries(payload).forEach(([key, value]) => {
+                if (value === "") return;
+                cleaned[key] = value;
+            });
+            return cleaned;
+        }
+
+        function currentFormsSnapshot() {
+            return {
+                tokenizerForm: cleanOptionalPayload(serializeForm("tokenizerForm")),
+                baseTrainForm: cleanOptionalPayload(serializeForm("baseTrainForm")),
+                chatSftForm: cleanOptionalPayload(serializeForm("chatSftForm")),
+                baseEvalForm: cleanOptionalPayload(serializeForm("baseEvalForm")),
+            };
+        }
+
+        function applyRecommendedForms(recommendedForms) {
+            if (!recommendedForms) return;
+            if (recommendedForms.tokenizerForm) fillForm("tokenizerForm", recommendedForms.tokenizerForm);
+            if (recommendedForms.baseTrainForm) fillForm("baseTrainForm", recommendedForms.baseTrainForm);
+            if (recommendedForms.chatSftForm) fillForm("chatSftForm", recommendedForms.chatSftForm);
+            if (recommendedForms.baseEvalForm) fillForm("baseEvalForm", recommendedForms.baseEvalForm);
+        }
+
+        function renderBenchmarks(benchmarks) {
+            if (!benchmarks || !benchmarks.record_count) {
+                benchmarkSummaryEl.textContent = "No benchmark history yet. Run a benchmark after a training pass to compare outcomes.";
+                return;
+            }
+            const lines = [
+                `History file: ${benchmarks.path}`,
+                `Visible records: ${benchmarks.record_count}`,
+            ];
+            const latestBenchmark = benchmarks.latest_benchmark || benchmarks.latest_base_eval;
+            if (latestBenchmark && latestBenchmark.metrics) {
+                const metrics = latestBenchmark.metrics;
+                const metricParts = [];
+                if (metrics.val_bpb !== undefined) metricParts.push(`val bpb ${Number(metrics.val_bpb).toFixed(6)}`);
+                if (metrics.train_bpb !== undefined) metricParts.push(`train bpb ${Number(metrics.train_bpb).toFixed(6)}`);
+                if (metrics.core_metric !== undefined) metricParts.push(`CORE ${Number(metrics.core_metric).toFixed(4)}`);
+                if (metricParts.length) {
+                    lines.push(`Latest benchmark: ${latestBenchmark.label || latestBenchmark.job_id} | ${metricParts.join(" | ")}`);
+                }
+            }
+            if (benchmarks.latest_tokenizer_eval && benchmarks.latest_tokenizer_eval.metrics && benchmarks.latest_tokenizer_eval.metrics.avg_bytes_per_token !== undefined) {
+                lines.push(`Latest tokenizer eval avg bytes/token: ${Number(benchmarks.latest_tokenizer_eval.metrics.avg_bytes_per_token).toFixed(2)}`);
+            }
+            benchmarkSummaryEl.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+        }
+
+        function checkpointCount(checkpointSets) {
+            return Object.values(checkpointSets).reduce((sum, entry) => sum + entry.tags.length, 0);
+        }
+
+        function renderChatStatus(chat) {
+            const runtimeValue = chat.ready ? "Ready" : (chat.loading ? "Loading" : "Not loaded");
+            const runtimeNoteParts = [
+                `Source: ${chat.config.source || "unknown"}`,
+                `Workers: ${chat.num_workers}`,
+            ];
+            if (chat.error) runtimeNoteParts.push(`Last error: ${chat.error}`);
+            setText("chatRuntimeValue", runtimeValue);
+            setText("chatRuntimeNote", runtimeNoteParts.join(" | "));
+
+            chatStatusBoxEl.innerHTML = `
+                <div><strong>Status:</strong> ${runtimeValue}</div>
+                <div style="margin-top: 8px;"><strong>Source:</strong> ${chat.config.source || "unknown"}</div>
+                <div style="margin-top: 8px;"><strong>Model tag:</strong> ${chat.config.model_tag || "latest"}</div>
+                <div style="margin-top: 8px;"><strong>Step:</strong> ${chat.config.step || "latest"}</div>
+                <div style="margin-top: 8px;"><strong>Workers:</strong> ${chat.num_workers}</div>
+                ${chat.error ? `<div style="margin-top: 8px;"><strong>Load error:</strong> ${chat.error}</div>` : ""}
+            `;
+        }
+
+        function renderRuntimeStatus(runtime) {
+            if (!runtime) return;
+            const devices = runtime.bundle.devices || [];
+            runtimePreferredDeviceEl.innerHTML = `<option value="">First available</option>`;
+            devices.forEach((device) => {
+                const option = document.createElement("option");
+                option.value = device.id;
+                option.textContent = `${device.id} - ${device.description}`;
+                runtimePreferredDeviceEl.appendChild(option);
+            });
+
+            runtimeModelOptionsEl.innerHTML = "";
+            (runtime.bundle.models || []).forEach((model) => {
+                const option = document.createElement("option");
+                option.value = model.path;
+                runtimeModelOptionsEl.appendChild(option);
+            });
+            syncRuntimeModelSelector(runtime);
+
+            const modelNames = (runtime.bundle.models || []).slice(0, 4).map((model) => model.name);
+            runtimeStatusBoxEl.innerHTML = `
+                <div><strong>Status:</strong> ${runtime.ready ? "ready" : runtime.running ? "starting" : "stopped"}</div>
+                <div style="margin-top: 8px;"><strong>Runtime bundle:</strong> ${runtime.bundle.runtime_exists ? runtime.bundle.runtime_dir : "missing"}</div>
+                <div style="margin-top: 8px;"><strong>Detected devices:</strong> ${devices.length ? devices.map((device) => device.id).join(", ") : "none"}</div>
+                <div style="margin-top: 8px;"><strong>Detected models:</strong> ${modelNames.length ? modelNames.join(", ") : "none found in repo yet"}</div>
+                ${runtime.bundle.recommended_model ? `<div style="margin-top: 8px;"><strong>Recommended model:</strong> ${runtime.bundle.recommended_model.name}</div>` : ""}
+                ${runtime.config && runtime.config.model_path ? `<div style="margin-top: 8px;"><strong>Active model:</strong> ${runtime.config.model_path}</div>` : ""}
+                ${runtime.last_error ? `<div style="margin-top: 8px;"><strong>Last error:</strong> ${runtime.last_error}</div>` : ""}
+            `;
+        }
+
+        function renderPresets(presets) {
+            presetListEl.innerHTML = "";
+            Object.entries(presets).forEach(([key, preset]) => {
+                const card = document.createElement("button");
+                card.type = "button";
+                card.className = `preset-card ${state.selectedPreset === key ? "active" : ""}`;
+                card.innerHTML = `
+                    <h3>${preset.label}</h3>
+                    <p>${preset.summary}</p>
+                `;
+                card.addEventListener("click", () => applyPreset(key));
+                presetListEl.appendChild(card);
+            });
+        }
+
+        function populateDesignForm(design) {
+            document.getElementById("designName").value = design.name || "";
+            document.getElementById("designTone").value = design.tone || "";
+            document.getElementById("designMission").value = design.mission || "";
+            document.getElementById("designTeamRole").value = design.team_role || "";
+            document.getElementById("designUncertainty").value = design.uncertainty_policy || "";
+            document.getElementById("designCollaboration").value = design.collaboration_policy || "";
+            document.getElementById("designGuardrails").value = (design.guardrails || []).join("\n");
+            document.getElementById("designNotes").value = design.custom_notes || "";
+            identityPreviewEl.value = design.identity_preview || "";
+            state.designDirty = false;
+        }
+
+        function renderDesigns(designs) {
+            if (!designs || !designs.length) return;
+            designSelectRowEl.innerHTML = "";
+
+            let activeDesign = designs[0];
+            if (state.selectedDesignSlug) {
+                const found = designs.find((design) => design.slug === state.selectedDesignSlug);
+                if (found) activeDesign = found;
+            } else {
+                state.selectedDesignSlug = activeDesign.slug;
+            }
+
+            designs.forEach((design) => {
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.className = `chip ${design.slug === activeDesign.slug ? "good" : ""}`;
+                chip.textContent = design.name;
+                chip.addEventListener("click", () => {
+                    state.selectedDesignSlug = design.slug;
+                    populateDesignForm(design);
+                    renderDesigns(state.bootstrap.builder.designs);
+                });
+                designSelectRowEl.appendChild(chip);
+            });
+
+            if (state.forceDesignPopulate || !state.designDirty) {
+                populateDesignForm(activeDesign);
+                state.forceDesignPopulate = false;
+            }
+        }
+
+        function renderJobs(jobs) {
+            jobsListEl.innerHTML = "";
+            if (!jobs || !jobs.length) {
+                jobsListEl.innerHTML = `<div class="note-box">No jobs yet. Launch one from the pipeline above.</div>`;
+                return;
+            }
+
+            if (!state.selectedJobId) {
+                state.selectedJobId = jobs[0].id;
+            }
+
+            jobs.forEach((job) => {
+                const card = document.createElement("button");
+                card.type = "button";
+                card.className = `job-card ${job.id === state.selectedJobId ? "active" : ""}`;
+                card.innerHTML = `
+                    <div class="job-title">
+                        <span>${job.label}</span>
+                        <span class="chip ${job.status === "completed" ? "good" : job.status === "running" ? "" : "warn"}">${job.status}</span>
+                    </div>
+                    <div class="job-meta">
+                        <div>${job.job_type}</div>
+                        <div>${formatTimestamp(job.created_at)}</div>
+                    </div>
+                `;
+                card.addEventListener("click", () => {
+                    state.selectedJobId = job.id;
+                    refreshSelectedJob();
+                    renderJobs(state.bootstrap.jobs);
+                });
+                jobsListEl.appendChild(card);
+            });
+
+            if (state.selectedJobId && !jobs.some((job) => job.id === state.selectedJobId)) {
+                state.selectedJobId = jobs[0].id;
+            }
+        }
+
+        function renderSelectedJob(job) {
+            state.selectedJob = job;
+            if (!job) {
+                jobSummaryEl.textContent = "Select a job to inspect its command and logs.";
+                jobCommandPreviewEl.textContent = "No job selected.";
+                jobLogsEl.value = "";
+                return;
+            }
+            const summary = [
+                `Status: ${job.status}`,
+                `Created: ${formatTimestamp(job.created_at)}`,
+                `Started: ${formatTimestamp(job.started_at)}`,
+                `Finished: ${formatTimestamp(job.finished_at)}`,
+                `Exit code: ${job.exit_code ?? "pending"}`,
+            ].join(" | ");
+            const metricParts = [];
+            if (job.metrics) {
+                if (job.metrics.min_val_bpb !== undefined) metricParts.push(`min val bpb ${Number(job.metrics.min_val_bpb).toFixed(6)}`);
+                if (job.metrics.val_bpb !== undefined) metricParts.push(`val bpb ${Number(job.metrics.val_bpb).toFixed(6)}`);
+                if (job.metrics.train_bpb !== undefined) metricParts.push(`train bpb ${Number(job.metrics.train_bpb).toFixed(6)}`);
+                if (job.metrics.avg_bytes_per_token !== undefined) metricParts.push(`avg bytes/token ${Number(job.metrics.avg_bytes_per_token).toFixed(2)}`);
+                if (job.metrics.oom_detected) metricParts.push("OOM detected");
+            }
+            jobSummaryEl.textContent = metricParts.length ? `${summary} | ${metricParts.join(" | ")}` : summary;
+            jobCommandPreviewEl.textContent = job.display_command || "No command recorded.";
+            jobLogsEl.value = (job.logs || []).join("\n");
+            jobLogsEl.scrollTop = jobLogsEl.scrollHeight;
+        }
+
+        function renderActivity(activity) {
+            if (!activity) {
+                activityMetaEl.textContent = "No activity yet.";
+                activityLogEl.value = "";
+                return;
+            }
+            const events = activity.events || [];
+            activityMetaEl.textContent = `Log file: ${activity.path} | visible events: ${events.length}`;
+            activityLogEl.value = events
+                .map((event) => {
+                    const timestamp = formatTimestamp(event.ts);
+                    const payload = event.payload && Object.keys(event.payload).length
+                        ? ` | ${JSON.stringify(event.payload)}`
+                        : "";
+                    return `${timestamp} | ${event.kind} | ${event.message}${payload}`;
+                })
+                .join("\n");
+            activityLogEl.scrollTop = activityLogEl.scrollHeight;
+        }
+
+        function renderSandbox(sandbox) {
+            sandboxFilesEl.innerHTML = "";
+            if (!sandbox || !sandbox.files || !sandbox.files.length) {
+                sandboxFilesEl.innerHTML = `<div class="note-box">No sandbox files yet. Create one on the right.</div>`;
+                sandboxMetaEl.textContent = `Sandbox root: ${sandbox ? sandbox.root : "assistant_sandbox"}`;
+                return;
+            }
+
+            sandbox.files.forEach((file) => {
+                const card = document.createElement("button");
+                card.type = "button";
+                card.className = `job-card ${file.path === state.selectedSandboxPath ? "active" : ""}`;
+                card.innerHTML = `
+                    <div class="job-title">
+                        <span>${file.path}</span>
+                        <span class="chip">${file.size} B</span>
+                    </div>
+                    <div class="job-meta">
+                        <div>${new Date(file.updated_at * 1000).toLocaleString()}</div>
+                    </div>
+                `;
+                card.addEventListener("click", () => loadSandboxFile(file.path));
+                sandboxFilesEl.appendChild(card);
+            });
+        }
+
+        function renderCorpus(corpus) {
+            corpusFilesEl.innerHTML = "";
+            if (!corpus || !corpus.files || !corpus.files.length) {
+                corpusFilesEl.innerHTML = `<div class="note-box">No corpus files yet. Create one on the right or copy one from the sandbox.</div>`;
+                corpusMetaEl.textContent = `Corpus root: ${corpus ? corpus.root : "local_corpus"}`;
+                return;
+            }
+
+            corpus.files.forEach((file) => {
+                const card = document.createElement("button");
+                card.type = "button";
+                card.className = `job-card ${file.path === state.selectedCorpusPath ? "active" : ""}`;
+                card.innerHTML = `
+                    <div class="job-title">
+                        <span>${file.path}</span>
+                        <span class="chip">${file.size} B</span>
+                    </div>
+                    <div class="job-meta">
+                        <div>${new Date(file.updated_at * 1000).toLocaleString()}</div>
+                    </div>
+                `;
+                card.addEventListener("click", () => loadCorpusFile(file.path));
+                corpusFilesEl.appendChild(card);
+            });
+        }
+
+        async function loadSandboxFile(path = null) {
+            const targetPath = (path || sandboxPathEl.value).trim();
+            if (!targetPath) {
+                showNotice("Enter a sandbox path first.", "bad");
+                return;
+            }
+            const file = await api(`/api/sandbox/file?path=${encodeURIComponent(targetPath)}`);
+            state.selectedSandboxPath = file.path;
+            sandboxPathEl.value = file.path;
+            sandboxEditorEl.value = file.content || "";
+            sandboxMetaEl.textContent = `Loaded ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            renderSandbox(state.bootstrap ? state.bootstrap.sandbox : { files: [] });
+        }
+
+        async function saveSandboxFile() {
+            const targetPath = sandboxPathEl.value.trim();
+            if (!targetPath) {
+                showNotice("Enter a sandbox path first.", "bad");
+                return;
+            }
+            const file = await api("/api/sandbox/write", {
+                method: "POST",
+                body: {
+                    path: targetPath,
+                    content: sandboxEditorEl.value,
+                },
+            });
+            state.selectedSandboxPath = file.path;
+            sandboxPathEl.value = file.path;
+            sandboxMetaEl.textContent = `Saved ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            showNotice(`Saved ${file.path}.`, "good");
+            await refreshBootstrap();
+        }
+
+        async function deleteSandboxFile() {
+            const targetPath = sandboxPathEl.value.trim();
+            if (!targetPath) {
+                showNotice("Enter a sandbox path first.", "bad");
+                return;
+            }
+            await api("/api/sandbox/delete", {
+                method: "POST",
+                body: { path: targetPath },
+            });
+            state.selectedSandboxPath = "";
+            sandboxPathEl.value = "";
+            sandboxEditorEl.value = "";
+            sandboxMetaEl.textContent = "Sandbox file deleted.";
+            showNotice(`Deleted ${targetPath}.`);
+            await refreshBootstrap();
+        }
+
+        function newSandboxFile() {
+            state.selectedSandboxPath = "";
+            sandboxPathEl.value = "";
+            sandboxEditorEl.value = "";
+            sandboxMetaEl.textContent = "New sandbox file. Enter a relative path, then save.";
+            renderSandbox(state.bootstrap ? state.bootstrap.sandbox : { files: [] });
+        }
+
+        async function loadCorpusFile(path = null) {
+            const targetPath = (path || corpusPathEl.value).trim();
+            if (!targetPath) {
+                showNotice("Enter a corpus path first.", "bad");
+                return;
+            }
+            const file = await api(`/api/corpus/file?path=${encodeURIComponent(targetPath)}`);
+            state.selectedCorpusPath = file.path;
+            corpusPathEl.value = file.path;
+            corpusEditorEl.value = file.content || "";
+            corpusMetaEl.textContent = `Loaded ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            renderCorpus(state.bootstrap ? state.bootstrap.corpus : { files: [] });
+        }
+
+        async function saveCorpusFile() {
+            const targetPath = corpusPathEl.value.trim();
+            if (!targetPath) {
+                showNotice("Enter a corpus path first.", "bad");
+                return;
+            }
+            const file = await api("/api/corpus/write", {
+                method: "POST",
+                body: {
+                    path: targetPath,
+                    content: corpusEditorEl.value,
+                },
+            });
+            state.selectedCorpusPath = file.path;
+            corpusPathEl.value = file.path;
+            corpusMetaEl.textContent = `Saved ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            showNotice(`Saved corpus file ${file.path}.`, "good");
+            await refreshBootstrap();
+        }
+
+        async function deleteCorpusFile() {
+            const targetPath = corpusPathEl.value.trim();
+            if (!targetPath) {
+                showNotice("Enter a corpus path first.", "bad");
+                return;
+            }
+            await api("/api/corpus/delete", {
+                method: "POST",
+                body: { path: targetPath },
+            });
+            state.selectedCorpusPath = "";
+            corpusPathEl.value = "";
+            corpusEditorEl.value = "";
+            corpusMetaEl.textContent = "Corpus file deleted.";
+            showNotice(`Deleted corpus file ${targetPath}.`);
+            await refreshBootstrap();
+        }
+
+        function newCorpusFile() {
+            state.selectedCorpusPath = "";
+            corpusPathEl.value = "";
+            corpusEditorEl.value = "";
+            corpusMetaEl.textContent = "New corpus file. Enter a relative path such as train/reference.txt, then save.";
+            renderCorpus(state.bootstrap ? state.bootstrap.corpus : { files: [] });
+        }
+
+        async function copySelectedSandboxToCorpus() {
+            const sourcePath = (sandboxPathEl.value || state.selectedSandboxPath).trim();
+            const targetPath = corpusPathEl.value.trim();
+            if (!sourcePath) {
+                showNotice("Load or select a sandbox file first.", "bad");
+                return;
+            }
+            if (!targetPath) {
+                showNotice("Enter a target corpus path first.", "bad");
+                return;
+            }
+            const result = await api("/api/corpus/copy-from-sandbox", {
+                method: "POST",
+                body: {
+                    source_path: sourcePath,
+                    target_path: targetPath,
+                },
+            });
+            state.selectedCorpusPath = result.target_path;
+            corpusPathEl.value = result.target_path;
+            showNotice(`Copied ${result.source_path} into corpus file ${result.target_path}.`, "good");
+            await refreshBootstrap();
+            await loadCorpusFile(result.target_path);
+        }
+
+        async function saveLastAssistantReplyToSandbox() {
+            if (!state.lastAssistantReply) {
+                showNotice("There is no assistant reply to save yet.", "bad");
+                return;
+            }
+            sandboxEditorEl.value = state.lastAssistantReply;
+            await saveSandboxFile();
+        }
+
+        function appendMessage(role, content) {
+            state.chatMessages.push({ role, content });
+            renderChatMessages();
+        }
+
+        function renderChatMessages() {
+            chatMessagesEl.innerHTML = "";
+            if (!state.chatMessages.length) {
+                chatMessagesEl.innerHTML = `<div class="message system"><div class="message-role">Hint</div>Use the truth-first preset, then ask the assistant to explain uncertainty, draft validated SFT rows into chat_train.jsonl, or help create corpus files under local_corpus/train.</div>`;
+                return;
+            }
+            state.chatMessages.forEach((message) => {
+                const row = document.createElement("div");
+                row.className = `message ${message.role}`;
+                row.innerHTML = `
+                    <div class="message-role">${message.role}</div>
+                    <div>${message.content}</div>
+                `;
+                chatMessagesEl.appendChild(row);
+            });
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        }
+
+        function currentDesignPayload() {
+            return {
+                slug: state.selectedDesignSlug,
+                name: document.getElementById("designName").value.trim(),
+                tone: document.getElementById("designTone").value.trim(),
+                mission: document.getElementById("designMission").value.trim(),
+                team_role: document.getElementById("designTeamRole").value.trim(),
+                uncertainty_policy: document.getElementById("designUncertainty").value.trim(),
+                collaboration_policy: document.getElementById("designCollaboration").value.trim(),
+                guardrails: document.getElementById("designGuardrails").value
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean),
+                custom_notes: document.getElementById("designNotes").value.trim(),
+            };
+        }
+
+        function updateChattyCogBridgeStatus(buildPayload) {
+            if (!window.chattyCogBridge?.available || typeof window.chattyCogBridge.updateStatus !== "function") {
+                return false;
+            }
+
+            try {
+                const payload = typeof buildPayload === "function" ? buildPayload() : buildPayload;
+                if (!payload || typeof payload !== "object") {
+                    return false;
+                }
+
+                window.chattyCogBridge.updateStatus({
+                    event_type: "suspend_rundown",
+                    ...payload,
+                });
+                return true;
+            } catch (err) {
+                console.warn("ChattyCog bridge update failed", err);
+                return false;
+            }
+        }
+
+        function buildChattyCogBridgePayload() {
+            if (!state.bootstrap) return null;
+
+            const builder = state.bootstrap.builder;
+            const runtime = state.bootstrap.runtime;
+            const jobs = state.bootstrap.jobs || [];
+            const selectedDesign = document.getElementById("designName").value.trim();
+            const latestJob = jobs.length ? jobs[0] : null;
+            const stageBits = [];
+
+            if (builder.identity_exists) stageBits.push("identity ready");
+            if (builder.tokenizer_ready) stageBits.push("tokenizer ready");
+            if (builder.checkpoint_sets.base.tags.length) stageBits.push(`${builder.checkpoint_sets.base.tags.length} base tag(s)`);
+            if (builder.checkpoint_sets.sft.tags.length) stageBits.push(`${builder.checkpoint_sets.sft.tags.length} SFT tag(s)`);
+            if (builder.checkpoint_sets.rl.tags.length) stageBits.push(`${builder.checkpoint_sets.rl.tags.length} RL tag(s)`);
+
+            const summaryParts = [
+                selectedDesign ? `Design: ${selectedDesign}.` : "Design not yet named.",
+                `Corpus train/val files: ${builder.corpus_summary.splits.train.file_count}/${builder.corpus_summary.splits.val.file_count}.`,
+                stageBits.length ? `Builder state: ${stageBits.join(", ")}.` : "Builder state: initial setup.",
+                runtime && runtime.ready ? "Local runtime ready." : "Local runtime not ready.",
+                latestJob ? `Latest job: ${latestJob.label} (${latestJob.status}).` : "No jobs launched yet.",
+            ];
+
+            const snapshotLines = [
+                "# LLM Tweaker Builder Snapshot",
+                "",
+                `- Base dir: ${builder.base_dir}`,
+                `- Corpus dir: ${builder.corpus_dir}`,
+                `- Assistant sandbox: ${builder.sandbox_dir}`,
+                `- Identity file ready: ${builder.identity_exists ? "yes" : "no"}`,
+                `- Tokenizer ready: ${builder.tokenizer_ready ? "yes" : "no"}`,
+                `- Base checkpoint tags: ${builder.checkpoint_sets.base.tags.length}`,
+                `- SFT checkpoint tags: ${builder.checkpoint_sets.sft.tags.length}`,
+                `- RL checkpoint tags: ${builder.checkpoint_sets.rl.tags.length}`,
+                `- Runtime ready: ${runtime && runtime.ready ? "yes" : "no"}`,
+                latestJob ? `- Latest job: ${latestJob.label} (${latestJob.status})` : "- Latest job: none",
+                selectedDesign ? `- Active design: ${selectedDesign}` : "- Active design: not set",
+                "",
+                "## Suggested next action",
+                !builder.identity_exists
+                    ? "Finish and publish the assistant identity design."
+                    : !builder.tokenizer_ready
+                        ? "Train the tokenizer on the local corpus."
+                        : !builder.checkpoint_sets.base.tags.length
+                            ? "Run a small base training job."
+                            : !builder.checkpoint_sets.sft.tags.length
+                                ? "Draft or review chat JSONL data, then run chat SFT."
+                                : "Test the current checkpoint in Conversation Lab and review logs.",
+                "",
+                "## Key artifacts",
+                "- builder_logs/activity.jsonl",
+                "- Assistant_sandbox/",
+                "- local_corpus/",
+            ];
+
+            return {
+                module_id: "llm_tweaker_builder",
+                summary: summaryParts.join(" "),
+                snapshot: snapshotLines.join("\n"),
+                tags: ["builder", "training", "local_only", "webview"],
+                payload: {
+                    design_name: selectedDesign,
+                    train_files: builder.corpus_summary.splits.train.file_count,
+                    val_files: builder.corpus_summary.splits.val.file_count,
+                    tokenizer_ready: builder.tokenizer_ready,
+                    identity_exists: builder.identity_exists,
+                    base_tags: builder.checkpoint_sets.base.tags.length,
+                    sft_tags: builder.checkpoint_sets.sft.tags.length,
+                    rl_tags: builder.checkpoint_sets.rl.tags.length,
+                    runtime_ready: !!(runtime && runtime.ready),
+                    latest_job_status: latestJob ? latestJob.status : null,
+                    latest_job_label: latestJob ? latestJob.label : null,
+                },
+            };
+        }
+
+        function renderBootstrap() {
+            if (!state.bootstrap) return;
+            const builder = state.bootstrap.builder;
+            const chat = state.bootstrap.chat;
+            const sandbox = state.bootstrap.sandbox;
+            const corpus = state.bootstrap.corpus;
+            const benchmarks = state.bootstrap.benchmarks;
+            const activity = state.bootstrap.activity;
+
+            setText("repoRootValue", builder.repo_root);
+            setText("baseDirValue", builder.base_dir);
+            setText("datasetShardCount", String(builder.dataset_shards));
+            setText("tokenizerStatus", builder.tokenizer_ready ? "Yes" : "No");
+            setText("identityStatus", builder.identity_exists ? "Yes" : "No");
+            setText("checkpointStatus", String(checkpointCount(builder.checkpoint_sets)));
+
+            const checkpointSummary = [
+                `Local only: ${builder.local_only ? "yes" : "no"}`,
+                `Train files: ${builder.corpus_summary.splits.train.file_count}`,
+                `Val files: ${builder.corpus_summary.splits.val.file_count}`,
+                `Sandbox files: ${builder.sandbox_file_count}`,
+                `Base tags: ${builder.checkpoint_sets.base.tags.length}`,
+                `SFT tags: ${builder.checkpoint_sets.sft.tags.length}`,
+                `RL tags: ${builder.checkpoint_sets.rl.tags.length}`,
+            ].join(" | ");
+            setText("checkpointSummary", checkpointSummary);
+
+            const gpuNames = builder.devices.gpu_names.length ? builder.devices.gpu_names.join(", ") : "No CUDA GPUs detected";
+            const deviceChips = [];
+            if (builder.devices.cuda_available) deviceChips.push(`<span class="chip good">CUDA</span>`);
+            if (builder.devices.mps_available) deviceChips.push(`<span class="chip good">MPS</span>`);
+            if (!builder.devices.cuda_available && !builder.devices.mps_available) deviceChips.push(`<span class="chip warn">CPU only</span>`);
+            deviceChips.push(`<span class="chip">${gpuNames}</span>`);
+            document.getElementById("deviceChips").innerHTML = deviceChips.join("");
+
+            setText("pathBaseDir", builder.base_dir);
+            setText("pathTokenizer", builder.tokenizer_path);
+            setText("pathIdentity", builder.identity_file);
+            setText("pathDataset", builder.dataset_dir);
+            setText("pathSandbox", builder.sandbox_dir);
+
+            if (!document.getElementById("tokenizerCorpusDir").value) {
+                document.getElementById("tokenizerCorpusDir").value = builder.corpus_dir;
+            }
+            if (!document.getElementById("baseCorpusDir").value) {
+                document.getElementById("baseCorpusDir").value = builder.corpus_dir;
+            }
+            if (!document.getElementById("baseEvalCorpusDir").value) {
+                document.getElementById("baseEvalCorpusDir").value = builder.corpus_dir;
+            }
+            if (!document.getElementById("sftTrainFiles").value) {
+                document.getElementById("sftTrainFiles").value = builder.default_chat_train_file;
+            }
+            if (!document.getElementById("sftValFiles").value) {
+                document.getElementById("sftValFiles").value = builder.default_chat_val_file;
+            }
+
+            renderChatStatus(chat);
+            renderRuntimeStatus(state.bootstrap.runtime);
+            renderSandbox(sandbox);
+            renderCorpus(corpus);
+            renderBenchmarks(benchmarks);
+            renderActivity(activity);
+            renderPresets(builder.guided_presets);
+            renderDesigns(builder.designs);
+            renderJobs(state.bootstrap.jobs);
+            updateChattyCogBridgeStatus(buildChattyCogBridgePayload);
+        }
+
+        async function refreshBootstrap() {
+            state.bootstrap = await api("/api/dashboard/bootstrap");
+            renderBootstrap();
+            if (state.selectedJobId) {
+                try {
+                    await refreshSelectedJob();
+                } catch (error) {
+                    console.warn(error);
+                }
+            }
+        }
+
+        async function refreshSelectedJob() {
+            if (!state.selectedJobId) {
+                renderSelectedJob(null);
+                return;
+            }
+            const payload = await api(`/api/dashboard/jobs/${state.selectedJobId}`);
+            renderSelectedJob(payload.job);
+        }
+
+        async function saveDesign() {
+            const design = await api("/api/dashboard/designs", {
+                method: "POST",
+                body: currentDesignPayload(),
+            });
+            state.selectedDesignSlug = design.design.slug;
+            state.forceDesignPopulate = true;
+            identityPreviewEl.value = design.design.identity_preview || "";
+            showNotice("Design saved and identity preview regenerated.");
+            await refreshBootstrap();
+        }
+
+        async function publishDesignAction() {
+            const payload = currentDesignPayload();
+            const saved = await api("/api/dashboard/designs", { method: "POST", body: payload });
+            state.selectedDesignSlug = saved.design.slug;
+            state.forceDesignPopulate = true;
+            const published = await api(`/api/dashboard/designs/${saved.design.slug}/publish`, { method: "POST" });
+            showNotice(`Published identity dataset to ${published.identity_file}`, "good");
+            await refreshBootstrap();
+        }
+
+        async function launchJob(jobType, formId = null) {
+            let params = {};
+            if (formId) params = serializeForm(formId);
+            const label = jobType.replaceAll("_", " ");
+            const response = await api("/api/dashboard/jobs", {
+                method: "POST",
+                body: {
+                    job_type: jobType,
+                    label,
+                    params,
+                },
+            });
+            state.selectedJobId = response.job.id;
+            showNotice(`Launched ${jobType}.`);
+            await refreshBootstrap();
+            await refreshSelectedJob();
+        }
+
+        function applyPreset(key) {
+            if (!state.bootstrap) return;
+            const preset = state.bootstrap.builder.guided_presets[key];
+            if (!preset) return;
+            state.selectedPreset = key;
+            state.selectedDesignSlug = null;
+            state.forceDesignPopulate = true;
+
+            populateDesignForm({
+                ...preset.design,
+                identity_preview: "Save the design to regenerate the identity dataset preview.",
+            });
+            fillForm("tokenizerForm", preset.recipes.tokenizer_train);
+            fillForm("baseTrainForm", preset.recipes.base_train);
+            fillForm("chatSftForm", preset.recipes.chat_sft);
+            fillForm("baseEvalForm", {
+                corpus_dir: state.bootstrap.builder.corpus_dir,
+                eval: "bpb,sample",
+                device_batch_size: 4,
+                split_tokens: 131072,
+                max_per_task: 64,
+                device_type: "cpu",
+            });
+            fillForm("chatLoadForm", { source: "sft", num_gpus: 1 });
+            renderPresets(state.bootstrap.builder.guided_presets);
+            showNotice(`Applied preset: ${preset.label}`);
+        }
+
+        async function stopSelectedJob() {
+            if (!state.selectedJobId) return;
+            await api(`/api/dashboard/jobs/${state.selectedJobId}/stop`, { method: "POST" });
+            showNotice("Stop signal sent to selected job.", "bad");
+            await refreshBootstrap();
+            await refreshSelectedJob();
+        }
+
+        async function loadChatRuntime(overrides = null) {
+            const payload = cleanOptionalPayload(overrides || serializeForm("chatLoadForm"));
+            const status = await api("/api/dashboard/chat/load", {
+                method: "POST",
+                body: payload,
+            });
+            renderChatStatus(status);
+            showNotice(status.ready ? "Chat model loaded." : "Chat load attempted. Check runtime status for details.", status.ready ? "good" : "bad");
+            await refreshBootstrap();
+        }
+
+        async function startLocalRuntime() {
+            const payload = cleanOptionalPayload(serializeForm("runtimeForm"));
+            const status = await api("/api/runtime/start", {
+                method: "POST",
+                body: payload,
+            });
+            renderRuntimeStatus(status);
+            chatProviderEl.value = "local_runtime";
+            showNotice(status.ready ? "Local runtime is ready." : "Local runtime start requested.", status.ready ? "good" : "bad");
+            await refreshBootstrap();
+        }
+
+        async function stopLocalRuntime() {
+            const status = await api("/api/runtime/stop", {
+                method: "POST",
+                body: {},
+            });
+            renderRuntimeStatus(status);
+            showNotice("Local runtime stopped.");
+            await refreshBootstrap();
+        }
+
+        async function autoTuneSettings() {
+            const payload = await api("/api/dashboard/autotune", {
+                method: "POST",
+                body: {
+                    forms: currentFormsSnapshot(),
+                },
+            });
+            applyRecommendedForms(payload.recommended_forms);
+            const summary = (payload.summary_notes || []).join(" ");
+            const firstBaseNote = (payload.form_notes && payload.form_notes.baseTrainForm || [])[0] || "";
+            showNotice(summary || firstBaseNote || "Applied auto-tuned settings.", "good");
+            renderBenchmarks(payload.history);
+        }
+
+        async function sendChat() {
+            if (state.isSendingChat) return;
+            const prompt = chatInputEl.value.trim();
+            if (!prompt) return;
+            state.isSendingChat = true;
+            appendMessage("user", prompt);
+            chatInputEl.value = "";
+            const assistantMessage = { role: "assistant", content: "" };
+            state.chatMessages.push(assistantMessage);
+            renderChatMessages();
+
+            try {
+                const provider = chatProviderEl.value;
+                const messageHistory = state.chatMessages
+                    .filter((message) => message.role === "user" || message.role === "assistant")
+                    .slice(0, -1);
+
+                if (provider === "local_runtime") {
+                    const sandboxPaths = state.selectedSandboxPath ? [state.selectedSandboxPath] : [];
+                    const corpusPaths = state.selectedCorpusPath ? [state.selectedCorpusPath] : [];
+                    const toolsEnabled = assistantToolsEnabledEl.value === "1";
+                    const endpoint = toolsEnabled ? "/api/runtime/assist" : "/api/runtime/chat";
+                    const response = await api(endpoint, {
+                        method: "POST",
+                        body: {
+                            messages: messageHistory,
+                            temperature: 0.2,
+                            max_tokens: 512,
+                            system_prompt: runtimeSystemPromptEl.value.trim(),
+                            sandbox_paths: sandboxPaths,
+                            corpus_paths: corpusPaths,
+                            max_actions: 3,
+                        },
+                    });
+                    assistantMessage.content = response.text || "[empty response]";
+                    if (response.actions && response.actions.length) {
+                        assistantMessage.content += `\n\n[local actions]\n${summarizeActions(response.actions)}`;
+                        const autotuneAction = response.actions.find((action) => action.tool === "autotune_settings" && action.status === "ok");
+                        if (autotuneAction && autotuneAction.result && autotuneAction.result.recommended_forms) {
+                            applyRecommendedForms(autotuneAction.result.recommended_forms);
+                            showNotice("The assistant auto-applied updated settings for the next run.", "good");
+                            if (autotuneAction.result.history) {
+                                renderBenchmarks(autotuneAction.result.history);
+                            }
+                        }
+                    }
+                    state.lastAssistantReply = assistantMessage.content;
+                    renderChatMessages();
+                } else {
+                    const response = await fetch("/chat/completions", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messages: messageHistory,
+                            temperature: 0.2,
+                            max_tokens: 256,
+                            top_k: 40,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        let detail = "Chat request failed";
+                        try {
+                            const errorPayload = await response.json();
+                            detail = errorPayload.detail || detail;
+                        } catch (error) {
+                            // Use the fallback detail.
+                        }
+                        throw new Error(detail);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = "";
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const chunks = buffer.split("\n\n");
+                        buffer = chunks.pop() || "";
+
+                        for (const chunk of chunks) {
+                            if (!chunk.startsWith("data: ")) continue;
+                            const payload = JSON.parse(chunk.slice(6));
+                            if (payload.token) {
+                                assistantMessage.content += payload.token;
+                                state.lastAssistantReply = assistantMessage.content;
+                                renderChatMessages();
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                assistantMessage.content = `[chat error] ${error.message}`;
+                renderChatMessages();
+                showNotice(error.message, "bad");
+            } finally {
+                state.isSendingChat = false;
+            }
+        }
+
+        function clearChat() {
+            state.chatMessages = [];
+            renderChatMessages();
+        }
+
+        function summarizeActions(actions) {
+            if (!actions || !actions.length) return "";
+            return actions.map((action) => `${action.tool} [${action.status}]`).join(", ");
+        }
+
+        async function initialize() {
+            document.querySelectorAll("button").forEach((button) => {
+                button.type = "button";
+            });
+            document.getElementById("refreshBtn").addEventListener("click", refreshBootstrap);
+            document.getElementById("applyTruthPresetBtn").addEventListener("click", () => applyPreset("truth_first_teammate"));
+            document.getElementById("saveDesignBtn").addEventListener("click", saveDesign);
+            document.getElementById("publishDesignBtn").addEventListener("click", publishDesignAction);
+            document.getElementById("refreshJobBtn").addEventListener("click", refreshSelectedJob);
+            document.getElementById("stopJobBtn").addEventListener("click", stopSelectedJob);
+            document.getElementById("loadChatBtn").addEventListener("click", () => loadChatRuntime());
+            document.getElementById("latestSftBtn").addEventListener("click", () => loadChatRuntime({ source: "sft", model_tag: "", step: "", num_gpus: 1 }));
+            document.getElementById("startRuntimeBtn").addEventListener("click", startLocalRuntime);
+            document.getElementById("stopRuntimeBtn").addEventListener("click", stopLocalRuntime);
+            document.getElementById("autoTuneBtn").addEventListener("click", autoTuneSettings);
+            document.getElementById("sendChatBtn").addEventListener("click", sendChat);
+            document.getElementById("clearChatBtn").addEventListener("click", clearChat);
+            document.getElementById("refreshSandboxBtn").addEventListener("click", refreshBootstrap);
+            document.getElementById("refreshActivityBtn").addEventListener("click", refreshBootstrap);
+            document.getElementById("newSandboxFileBtn").addEventListener("click", newSandboxFile);
+            document.getElementById("saveSandboxBtn").addEventListener("click", saveSandboxFile);
+            document.getElementById("loadSandboxBtn").addEventListener("click", () => loadSandboxFile());
+            document.getElementById("deleteSandboxBtn").addEventListener("click", deleteSandboxFile);
+            document.getElementById("saveReplyToSandboxBtn").addEventListener("click", saveLastAssistantReplyToSandbox);
+            document.getElementById("refreshCorpusBtn").addEventListener("click", refreshBootstrap);
+            document.getElementById("newCorpusFileBtn").addEventListener("click", newCorpusFile);
+            document.getElementById("saveCorpusBtn").addEventListener("click", saveCorpusFile);
+            document.getElementById("loadCorpusBtn").addEventListener("click", () => loadCorpusFile());
+            document.getElementById("deleteCorpusBtn").addEventListener("click", deleteCorpusFile);
+            document.getElementById("copySandboxToCorpusBtn").addEventListener("click", copySelectedSandboxToCorpus);
+            runtimeModelSelectEl.addEventListener("change", () => {
+                const runtimeModelPathEl = document.getElementById("runtimeModelPath");
+                if (runtimeModelSelectEl.value && runtimeModelSelectEl.value !== "__custom__") {
+                    runtimeModelPathEl.value = runtimeModelSelectEl.value;
+                }
+                updateRuntimeModelMeta(state.bootstrap ? state.bootstrap.runtime : null, runtimeModelPathEl.value);
+            });
+            document.getElementById("runtimeModelPath").addEventListener("input", () => {
+                if (state.bootstrap && state.bootstrap.runtime) {
+                    syncRuntimeModelSelector(state.bootstrap.runtime);
+                } else {
+                    updateRuntimeModelMeta(null, document.getElementById("runtimeModelPath").value);
+                }
+            });
+            document.querySelectorAll("#designForm input, #designForm textarea").forEach((field) => {
+                field.addEventListener("input", () => {
+                    state.designDirty = true;
+                });
+            });
+            chatInputEl.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendChat();
+                }
+            });
+            document.querySelectorAll("[data-job]").forEach((button) => {
+                button.addEventListener("click", () => launchJob(button.dataset.job, button.dataset.form || null));
+            });
+
+            await refreshBootstrap();
+            renderChatMessages();
+            applyPreset("truth_first_teammate");
+
+            state.pollingHandle = window.setInterval(async () => {
+                try {
+                    await refreshBootstrap();
+                } catch (error) {
+                    console.warn("Polling error", error);
+                }
+            }, 4000);
+        }
+
+        initialize().catch((error) => {
+            showNotice(error.message, "bad");
+        });
+    </script>
+</body>
+</html>
