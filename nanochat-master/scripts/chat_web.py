@@ -895,6 +895,14 @@ async def logo():
     return FileResponse(str(NANOCHAT_DIR / "logo.svg"), media_type="image/svg+xml")
 
 
+@app.get("/assets/branding/fmi-splash-wordmark.png")
+async def fmi_splash_wordmark():
+    return FileResponse(
+        str(NANOCHAT_DIR / "assets" / "branding" / "fmi-splash-wordmark.png"),
+        media_type="image/png",
+    )
+
+
 @app.get("/api/dashboard/bootstrap")
 async def dashboard_bootstrap():
     return {

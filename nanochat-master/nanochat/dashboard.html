@@ -48,6 +48,10 @@
             overflow-x: hidden;
         }
 
+        body.splash-active {
+            overflow: hidden;
+        }
+
         body::before {
             content: "";
             position: fixed;
@@ -70,6 +74,61 @@
             padding: 24px 0 96px;
             position: relative;
             z-index: 1;
+        }
+
+        .startup-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at top, rgba(15, 109, 106, 0.16), transparent 28%),
+                linear-gradient(180deg, rgba(8, 13, 17, 0.96), rgba(10, 15, 20, 0.98));
+            transition: opacity 220ms ease, visibility 220ms ease;
+        }
+
+        .startup-splash.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .startup-splash-card {
+            width: min(760px, calc(100vw - 48px));
+            padding: 28px;
+            border-radius: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(19, 24, 29, 0.92);
+            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
+            text-align: center;
+        }
+
+        .startup-splash-logo {
+            display: block;
+            width: min(100%, 520px);
+            margin: 0 auto 18px;
+        }
+
+        .startup-splash-title {
+            margin: 0;
+            color: #f5f3ec;
+            font-size: clamp(1.4rem, 3vw, 2rem);
+            font-weight: 700;
+        }
+
+        .startup-splash-copy,
+        .startup-splash-note {
+            margin: 14px auto 0;
+            max-width: 58ch;
+            color: rgba(235, 239, 236, 0.82);
+            line-height: 1.6;
+        }
+
+        .startup-splash-note {
+            color: rgba(235, 239, 236, 0.62);
+            font-size: 0.92rem;
         }
 
         .hero {
@@ -443,6 +502,32 @@
             line-height: 1.55;
         }
 
+        .fmi-about-panel {
+            margin-top: 18px;
+            border: 1px solid rgba(15, 109, 106, 0.14);
+            border-radius: var(--radius-md);
+            background: rgba(255, 248, 237, 0.76);
+            padding: 14px 16px;
+        }
+
+        .fmi-about-panel summary {
+            cursor: pointer;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .fmi-about-copy {
+            margin-top: 12px;
+            color: var(--muted);
+            display: grid;
+            gap: 10px;
+            line-height: 1.55;
+        }
+
+        .fmi-about-copy p {
+            margin: 0;
+        }
+
         .pipeline {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -646,6 +731,14 @@
     </style>
 </head>
 <body>
+    <div id="startupSplash" class="startup-splash" aria-live="polite">
+        <div class="startup-splash-card">
+            <img class="startup-splash-logo" src="/assets/branding/fmi-splash-wordmark.png" alt="Fractal Media Infrastructure">
+            <p class="startup-splash-title">Fractal Media Infrastructure</p>
+            <p class="startup-splash-copy">Independent R&amp;D umbrella for open-source AI tooling, cognitive scaffolding experiments, and local-first research systems.</p>
+            <p class="startup-splash-note">Press Space, Enter, Esc, or click to continue</p>
+        </div>
+    </div>
     <div class="shell">
         <div id="notice" class="notice"></div>
 
@@ -838,6 +931,17 @@
                             <div style="margin-top: 8px;"><strong>Local Corpus:</strong> <span id="pathDataset"></span></div>
                             <div style="margin-top: 8px;"><strong>Assistant Sandbox:</strong> <span id="pathSandbox"></span></div>
                         </div>
+                        <details class="fmi-about-panel">
+                            <summary>About Fractal Media Infrastructure</summary>
+                            <div class="fmi-about-copy">
+                                <p><strong>Publisher / steward:</strong> Fractal Media Infrastructure</p>
+                                <p><strong>GitHub:</strong> <a href="https://github.com/instance001" target="_blank" rel="noopener">instance001</a></p>
+                                <p><strong>Upstream lineage:</strong> built on top of Andrej Karpathy's <code>nanochat</code> project, then adapted into this local builder workflow and ChattyCog-hosted module wrapper.</p>
+                                <p><strong>License:</strong> outer ChattyCog wrapper AGPLv3, nested upstream-derived nanochat builder MIT where applicable</p>
+                                <p>LLM Tweaker Builder is packaged under FMI as a small independent R&amp;D umbrella for open-source AI tooling, cognitive scaffolding experiments, and local-first research systems.</p>
+                                <p><a href="https://github.com/instance001/nanochat-llm-tweaker" target="_blank" rel="noopener">Repository: instance001/nanochat-llm-tweaker</a></p>
+                            </div>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -1419,6 +1523,7 @@
     </div>
 
     <script>
+        const STARTUP_SPLASH_DURATION_MS = 3000;
         const state = {
             bootstrap: null,
             selectedPreset: null,
@@ -1434,6 +1539,10 @@
             forceDesignPopulate: true,
             lastAssistantReply: "",
         };
+
+        const startupSplashEl = document.getElementById("startupSplash");
+        let startupSplashDismissed = false;
+        let startupSplashTimerHandle = null;
 
         const noticeEl = document.getElementById("notice");
         const presetListEl = document.getElementById("presetList");
@@ -1465,6 +1574,33 @@
         const benchmarkSummaryEl = document.getElementById("benchmarkSummary");
         const activityMetaEl = document.getElementById("activityMeta");
         const activityLogEl = document.getElementById("activityLog");
+
+        function dismissStartupSplash() {
+            if (startupSplashDismissed || !startupSplashEl) return;
+            startupSplashDismissed = true;
+            if (startupSplashTimerHandle) {
+                window.clearTimeout(startupSplashTimerHandle);
+                startupSplashTimerHandle = null;
+            }
+            startupSplashEl.classList.add("hidden");
+            document.body.classList.remove("splash-active");
+            window.removeEventListener("keydown", handleStartupSplashKeydown);
+        }
+
+        function handleStartupSplashKeydown(event) {
+            if (event.key === " " || event.key === "Enter" || event.key === "Escape") {
+                event.preventDefault();
+                dismissStartupSplash();
+            }
+        }
+
+        function initStartupSplash() {
+            if (!startupSplashEl) return;
+            document.body.classList.add("splash-active");
+            startupSplashEl.addEventListener("click", dismissStartupSplash);
+            window.addEventListener("keydown", handleStartupSplashKeydown);
+            startupSplashTimerHandle = window.setTimeout(dismissStartupSplash, STARTUP_SPLASH_DURATION_MS);
+        }
 
         function showNotice(message, kind = "good") {
             noticeEl.textContent = message;
@@ -2559,6 +2695,7 @@
         }
 
         async function initialize() {
+            initStartupSplash();
             document.querySelectorAll("button").forEach((button) => {
                 button.type = "button";
             });
