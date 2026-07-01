@@ -17,6 +17,7 @@ import logging
 import os
 import random
 import re
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,11 +44,13 @@ from nanochat.dashboard_tools import (
     GUIDED_PRESETS,
     builder_state,
     build_job_command,
+    delete_design,
     list_designs,
     publish_design,
     save_design,
 )
 from nanochat.activity_log import ActivityLogManager
+from nanochat.ecg_monitor import EcgMonitor
 from nanochat.local_runtime import LocalRuntimeManager
 from nanochat.sandbox_tools import CorpusManager, SandboxManager
 from nanochat.sft_dataset_tools import (
@@ -70,6 +73,17 @@ MIN_TOP_K = 0
 MAX_TOP_K = 200
 MIN_MAX_TOKENS = 1
 MAX_MAX_TOKENS = 4096
+DEFAULT_LOCAL_RUNTIME_COCKPIT_PROTOCOL = (
+    "Cockpit protocol for llm-tweaker:\n"
+    "- You are operating inside llm-tweaker, a local LLM builder and tuning dashboard based on nanochat.\n"
+    "- Your role is assistant and tutor for model creation, dataset shaping, evaluation, debugging, and safe next-step guidance.\n"
+    "- Prefer direct, practical, user-visible answers over narration about your internal process.\n"
+    "- Do not emit hidden chain-of-thought, scratchpad notes, or reasoning-only text in place of a final answer.\n"
+    "- Never leave the assistant message blank when you can answer or ask one short clarifying question.\n"
+    "- If tools or local actions are available, use the required assistant-action format only when an action is actually needed.\n"
+    "- Treat dashboard controls, files, and logs as the operating environment you are helping the user navigate.\n"
+    "- If something is missing or uncertain, say that plainly and name the next concrete thing to check."
+)
 DEFAULT_LOCAL_RUNTIME_SYSTEM_PROMPT = (
     "You are the local builder assistant for this dashboard. "
     "Help the user run the LLM builder, explain the next step, point out missing files or settings, "
@@ -183,6 +197,13 @@ class DesignRequest(BaseModel):
     collaboration_policy: str
     guardrails: List[str] = Field(default_factory=list)
     custom_notes: str = ""
+    recipes: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class DesignDraftRequest(BaseModel):
+    goal: str
+    temperature: float = 0.3
+    max_tokens: int = 900
 
 
 class JobRequest(BaseModel):
@@ -204,7 +225,7 @@ class RuntimeStartRequest(BaseModel):
     model_path: str
     host: str = "127.0.0.1"
     port: int = 8091
-    ctx_size: int = 4096
+    ctx_size: int = 8192
     threads: int = 8
     threads_http: int = 4
     parallel: int = 2
@@ -229,7 +250,9 @@ class RuntimeAssistRequest(RuntimeChatRequest):
 
 class SandboxWriteRequest(BaseModel):
     path: str
-    content: str
+    content: str = ""
+    records: List[dict[str, Any]] = Field(default_factory=list)
+    mode: str = "overwrite"
 
 
 class SandboxDeleteRequest(BaseModel):
@@ -300,6 +323,27 @@ def load_html(path: Path) -> str:
         return handle.read()
 
 
+def dashboard_ecg_activity_snapshot(app: FastAPI) -> dict[str, Any]:
+    jobs = app.state.job_manager.list_jobs()
+    runtime = app.state.local_runtime.status()
+    latest_event = app.state.activity_log.latest_event()
+    running_jobs = [job for job in jobs if job.get("status") == "running"]
+    queued_jobs = [job for job in jobs if job.get("status") == "queued"]
+    paused_jobs = [job for job in jobs if job.get("status") == "paused"]
+    return {
+        "running_jobs": len(running_jobs),
+        "queued_jobs": len(queued_jobs),
+        "paused_jobs": len(paused_jobs),
+        "latest_job_label": running_jobs[0]["label"] if running_jobs else queued_jobs[0]["label"] if queued_jobs else None,
+        "runtime_running": bool(runtime.get("running")),
+        "runtime_ready": bool(runtime.get("ready")),
+        "runtime_mode": runtime.get("mode"),
+        "chat_loading": bool(app.state.chat_loading),
+        "recent_event_age_s": (time.time() - float(latest_event["ts"])) if latest_event else None,
+        "recent_event_kind": latest_event.get("kind") if latest_event else None,
+    }
+
+
 def chat_status_snapshot(app: FastAPI) -> dict[str, Any]:
     worker_pool = getattr(app.state, "worker_pool", None)
     config = getattr(app.state, "chat_config", {})
@@ -356,6 +400,104 @@ def parse_assistant_action(text: str) -> dict[str, Any] | None:
         payload = json.loads(match.group(1))
     except json.JSONDecodeError:
         return None
+
+
+def extract_json_object(text: str) -> dict[str, Any]:
+    candidate = text.strip()
+    if candidate.startswith("```"):
+        fence_match = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", candidate, re.IGNORECASE)
+        if fence_match:
+            candidate = fence_match.group(1)
+    try:
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("The local GGUF did not return a JSON design draft.")
+    parsed = json.loads(candidate[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("The local GGUF returned JSON, but it was not an object.")
+    return parsed
+
+
+def _default_design_recipes() -> dict[str, dict[str, Any]]:
+    preset = GUIDED_PRESETS["truth_first_teammate"]["recipes"]
+    return {
+        "tokenizerForm": dict(preset["tokenizer_train"]),
+        "baseTrainForm": dict(preset["base_train"]),
+        "chatSftForm": dict(preset["chat_sft"]),
+        "baseEvalForm": {
+            "corpus_dir": preset["tokenizer_train"]["corpus_dir"],
+            "eval": "bpb,sample",
+            "device_batch_size": 4,
+            "split_tokens": 131072,
+            "max_per_task": 64,
+            "device_type": "cpu",
+        },
+    }
+
+
+def _coerce_design_draft_payload(payload: dict[str, Any], goal: str) -> dict[str, Any]:
+    guardrails = payload.get("guardrails", [])
+    if not isinstance(guardrails, list):
+        guardrails = [str(guardrails)]
+    recipes = payload.get("recipes", {})
+    if not isinstance(recipes, dict):
+        recipes = {}
+    merged_recipes = _default_design_recipes()
+    for key, value in recipes.items():
+        if key in merged_recipes and isinstance(value, dict):
+            merged_recipes[key].update(value)
+
+    name = str(payload.get("name") or "").strip() or f"Goal Draft {random.randint(1000, 9999)}"
+    return {
+        "name": name,
+        "mission": str(payload.get("mission") or goal).strip(),
+        "team_role": str(payload.get("team_role") or "You support the user as a practical member of their team.").strip(),
+        "tone": str(payload.get("tone") or "Direct, calm, and practical.").strip(),
+        "uncertainty_policy": str(payload.get("uncertainty_policy") or "If confidence is low, say so plainly and separate facts from guesses.").strip(),
+        "collaboration_policy": str(payload.get("collaboration_policy") or "State assumptions, ask for missing constraints, and suggest the next useful step.").strip(),
+        "guardrails": [str(item).strip() for item in guardrails if str(item).strip()],
+        "custom_notes": str(payload.get("custom_notes") or "").strip(),
+        "recipes": merged_recipes,
+        "draft_goal": goal,
+        "draft_source": "local_gguf",
+        "draft_generated_at": time.time(),
+    }
+
+
+def build_design_draft_prompt(goal: str) -> str:
+    schema = {
+        "name": "Short assistant name",
+        "mission": "One or two sentences describing the intended outcome",
+        "team_role": "How the assistant should position itself relative to the user",
+        "tone": "Desired communication tone",
+        "uncertainty_policy": "How it should behave when unsure",
+        "collaboration_policy": "How it should work with humans, tools, and limits",
+        "guardrails": ["Three to six concrete behavior rules"],
+        "custom_notes": "Optional implementation or domain notes",
+        "recipes": {
+            "tokenizerForm": {"vocab_size": 32768, "max_chars": 250000000, "doc_cap": 10000},
+            "baseTrainForm": {"depth": 6, "head_dim": 64, "max_seq_len": 512, "device_batch_size": 8, "total_batch_size": 8192, "num_iterations": 1200, "device_type": "cpu", "run": "builder-base"},
+            "chatSftForm": {"include_identity": 1, "identity_repeats": 2, "max_seq_len": 512, "device_batch_size": 8, "total_batch_size": 8192, "num_iterations": 900, "device_type": "cpu", "run": "builder-sft"},
+            "baseEvalForm": {"eval": "bpb,sample", "device_batch_size": 4, "split_tokens": 131072, "max_per_task": 64, "device_type": "cpu"},
+        },
+    }
+    return (
+        "You are drafting a local LLM builder blueprint from a plain-language user goal. "
+        "Return JSON only, with no markdown and no explanation. "
+        "Make the design practical, cautious, and realistic for a local-first workflow. "
+        "Keep recipes conservative for a beginner machine unless the goal strongly implies otherwise. "
+        "Do not invent unsupported stages or cloud dependencies.\n\n"
+        f"User goal:\n{goal}\n\n"
+        "Required JSON schema:\n"
+        f"{json.dumps(schema, ensure_ascii=True, indent=2)}"
+    )
     if not isinstance(payload, dict) or "tool" not in payload:
         return None
     payload.setdefault("args", {})
@@ -373,10 +515,10 @@ def render_tool_help() -> str:
         ("get_corpus_schema", "{}"),
         ("list_corpus_files", "{}"),
         ("read_corpus_file", '{"path": "train/reference.txt"}'),
-        ("write_corpus_file", '{"path": "train/reference.txt", "content": "..."}'),
+        ("write_corpus_file", '{"path": "train/reference.parquet", "records": [{"text": "..."}, {"text": "..."}]}'),
         ("draft_corpus_file", '{"path": "train/reference.txt", "mode": "append", "content": "..."}'),
         ("delete_corpus_file", '{"path": "train/tmp.txt"}'),
-        ("copy_sandbox_to_corpus", '{"source_path": "notes/reference.txt", "target_path": "train/reference.txt"}'),
+        ("copy_sandbox_to_corpus", '{"source_path": "notes/reference.txt", "target_path": "train/reference.parquet"}'),
         ("get_sft_schema", "{}"),
         ("draft_sft_data", '{"path": "chat_train.jsonl", "mode": "append", "pairs": [{"user": "...", "assistant": "..."}]}'),
         ("list_sandbox_files", "{}"),
@@ -399,8 +541,9 @@ def render_tool_help() -> str:
     lines.append(
         "Tool restrictions: sandbox file paths must stay inside assistant_sandbox. "
         "corpus file paths must stay inside local_corpus. "
+        "parquet corpus writes require structured JSON object records. "
         "draft_sft_data only writes validated conversation JSONL. "
-        "launch_job only supports tokenizer_train, tokenizer_eval, base_train, base_eval, benchmark_eval, and chat_sft."
+        "launch_job only supports tokenizer_train, tokenizer_eval, base_train, base_eval, benchmark_eval, chat_sft, chat_rl, and chat_eval."
     )
     return "\n".join(lines)
 
@@ -443,6 +586,42 @@ def _render_corpus_content(args: dict[str, Any]) -> str:
     raise ValueError("Corpus drafting requires 'content', 'lines', 'paragraphs', or 'records'.")
 
 
+def _extract_corpus_records(args: dict[str, Any]) -> list[dict[str, Any]]:
+    records = args.get("records")
+    if isinstance(records, list) and all(isinstance(record, dict) for record in records):
+        return records
+
+    content = str(args.get("content", "")).strip()
+    if not content:
+        raise ValueError("Parquet corpus writes require 'records' or JSON/JSONL content.")
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, list) and all(isinstance(record, dict) for record in payload):
+        return payload
+    if isinstance(payload, dict):
+        return [payload]
+
+    parsed_records = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Parquet corpus JSONL content must contain one valid JSON object per line.") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Parquet corpus JSONL content must contain JSON objects.")
+        parsed_records.append(payload)
+
+    if not parsed_records:
+        raise ValueError("Parquet corpus writes require at least one JSON object record.")
+    return parsed_records
+
+
 def corpus_schema_payload(app: FastAPI) -> dict[str, Any]:
     builder = builder_state()
     return {
@@ -452,12 +631,13 @@ def corpus_schema_payload(app: FastAPI) -> dict[str, Any]:
             "train/reference.txt",
             "train/notes.jsonl",
             "val/holdout.txt",
+            "train/reference.parquet",
         ],
         "notes": [
             "Tokenizer and base training read local_corpus only.",
             "If local_corpus/train exists, the train split reads from that folder.",
             "If local_corpus/val exists, the val split reads from that folder.",
-            "Plain text is the simplest starting format.",
+            "Text, JSON/JSONL, and parquet are all valid corpus formats.",
         ],
         "current_summary": builder.get("corpus_summary", {}),
     }
@@ -507,10 +687,35 @@ def execute_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -
     if tool_name == "read_corpus_file":
         return app.state.corpus.read_file(str(args.get("path", "")))
     if tool_name == "write_corpus_file":
-        return app.state.corpus.write_file(str(args.get("path", "")), str(args.get("content", "")))
+        target_path = str(args.get("path", ""))
+        if Path(target_path).suffix.lower() == ".parquet":
+            return app.state.corpus.write_parquet_file(
+                target_path,
+                _extract_corpus_records(args),
+                mode=str(args.get("mode") or "overwrite"),
+            )
+        return app.state.corpus.write_file(target_path, str(args.get("content", "")))
     if tool_name == "draft_corpus_file":
         target_path = _normalize_relative_corpus_path(str(args.get("path") or "train/reference.txt"))
         mode = str(args.get("mode") or "append").strip().lower()
+        if Path(target_path).suffix.lower() == ".parquet":
+            file_result = app.state.corpus.write_parquet_file(target_path, _extract_corpus_records(args), mode=mode)
+            preview = json.dumps(file_result.get("sample_rows", []), ensure_ascii=True, indent=2)[:1200]
+            payload = {
+                "path": file_result["path"],
+                "kind": "parquet",
+                "mode": mode,
+                "size": file_result["size"],
+                "row_count": file_result.get("row_count", 0),
+                "updated_at": file_result["updated_at"],
+                "preview": preview,
+            }
+            app.state.activity_log.log_event(
+                "assistant_corpus_draft",
+                f"Drafted parquet corpus content into {file_result['path']}",
+                {"path": file_result["path"], "mode": mode, "row_count": file_result.get("row_count", 0)},
+            )
+            return payload
         new_text = _render_corpus_content(args)
         existing_text = ""
         if mode == "append":
@@ -542,7 +747,7 @@ def execute_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -
         source_path = _normalize_relative_sandbox_path(str(args.get("source_path", "")))
         target_path = _normalize_relative_corpus_path(str(args.get("target_path", "")))
         source_file = app.state.sandbox._read_file(source_path, log_event=False)
-        result = app.state.corpus.write_file(target_path, source_file["content"])
+        result = app.state.corpus.write_from_content(target_path, source_file["content"], mode="overwrite")
         app.state.activity_log.log_event(
             "assistant_corpus_copy",
             f"Copied sandbox file {source_path} into corpus file {result['path']}",
@@ -597,7 +802,7 @@ def execute_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -
     if tool_name == "stop_job":
         return {"job": app.state.job_manager.stop_job(str(args.get("job_id", "")))}
     if tool_name == "launch_job":
-        allowed_job_types = {"tokenizer_train", "tokenizer_eval", "base_train", "base_eval", "benchmark_eval", "chat_sft"}
+        allowed_job_types = {"tokenizer_train", "tokenizer_eval", "base_train", "base_eval", "benchmark_eval", "chat_sft", "chat_rl", "chat_eval"}
         job_type = str(args.get("job_type", ""))
         if job_type not in allowed_job_types:
             raise ValueError(f"Unsupported job_type for assistant tool: {job_type}")
@@ -615,7 +820,8 @@ def build_runtime_system_prompt(
     sandbox_paths: Optional[list[str]] = None,
     corpus_paths: Optional[list[str]] = None,
 ) -> str:
-    prompt = system_prompt or DEFAULT_LOCAL_RUNTIME_SYSTEM_PROMPT
+    operator_prompt = (system_prompt or "").strip() or DEFAULT_LOCAL_RUNTIME_SYSTEM_PROMPT
+    prompt = f"{DEFAULT_LOCAL_RUNTIME_COCKPIT_PROTOCOL}\n\n{operator_prompt}"
     sandbox_paths = sandbox_paths or []
     corpus_paths = corpus_paths or []
     activity_context = app.state.activity_log.render_recent(limit=40, max_chars=3500)
@@ -826,6 +1032,8 @@ async def lifespan(app: FastAPI):
         benchmark_history=app.state.benchmark_history,
     )
     app.state.local_runtime = LocalRuntimeManager(str(REPO_ROOT))
+    app.state.ecg_monitor = EcgMonitor(lambda: dashboard_ecg_activity_snapshot(app))
+    app.state.ecg_monitor.start()
     app.state.sandbox = SandboxManager(REPO_ROOT / "assistant_sandbox", activity_log=app.state.activity_log)
     app.state.corpus = CorpusManager(REPO_ROOT / "local_corpus", activity_log=app.state.activity_log)
     app.state.worker_pool = None
@@ -841,22 +1049,19 @@ async def lifespan(app: FastAPI):
         runtime_status = app.state.local_runtime.status()
         if runtime_status["bundle"]["files"]["server_exists"] and runtime_status["bundle"]["recommended_model"] is not None:
             try:
-                app.state.local_runtime.start(
+                autostart_config = app.state.local_runtime.recommended_start_config(
                     {
                         "model_path": args.runtime_model,
                         "port": args.runtime_port,
-                        "ctx_size": 4096,
-                        "threads": max(4, (os.cpu_count() or 4)),
-                        "threads_http": 4,
-                        "parallel": 2,
                         "alias": "local-builder-assistant",
                         "device_strategy": args.runtime_device_strategy,
                     }
                 )
+                app.state.local_runtime.start(autostart_config)
                 app.state.activity_log.log_event(
                     "runtime_started",
                     "Local runtime auto-started",
-                    {"model_path": args.runtime_model or runtime_status["bundle"]["recommended_model"]},
+                    {"model_path": args.runtime_model or runtime_status["bundle"]["recommended_model"], "config": autostart_config},
                 )
                 logger.info("Local runtime auto-started")
             except Exception as exc:
@@ -866,6 +1071,7 @@ async def lifespan(app: FastAPI):
     logger.info("Server ready at http://localhost:%s", args.port)
     yield
     app.state.activity_log.log_event("server_shutdown", "Builder server shutting down", {})
+    app.state.ecg_monitor.stop()
     app.state.local_runtime.stop()
 
 
@@ -910,11 +1116,17 @@ async def dashboard_bootstrap():
         "jobs": app.state.job_manager.list_jobs(),
         "chat": chat_status_snapshot(app),
         "runtime": app.state.local_runtime.status(),
+        "ecg": app.state.ecg_monitor.snapshot(),
         "sandbox": app.state.sandbox.status(),
         "corpus": app.state.corpus.status(),
         "activity": app.state.activity_log.snapshot(limit=80),
         "benchmarks": app.state.benchmark_history.snapshot(limit=20),
     }
+
+
+@app.get("/api/dashboard/ecg")
+async def dashboard_ecg():
+    return app.state.ecg_monitor.snapshot()
 
 
 @app.get("/api/dashboard/jobs")
@@ -977,6 +1189,30 @@ async def stop_dashboard_job(job_id: str):
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}") from exc
 
 
+@app.post("/api/dashboard/jobs/{job_id}/pause")
+async def pause_dashboard_job(job_id: str):
+    try:
+        job = app.state.job_manager.pause_job(job_id)
+        app.state.activity_log.log_event("job_pause", f"Dashboard pause requested for {job['label']}", {"job_id": job_id})
+        return {"job": job}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/dashboard/jobs/{job_id}/resume")
+async def resume_dashboard_job(job_id: str):
+    try:
+        job = app.state.job_manager.resume_job(job_id)
+        app.state.activity_log.log_event("job_resume", f"Dashboard resumed job {job['label']}", {"job_id": job["id"], "source_job_id": job_id})
+        return {"job": job}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/dashboard/designs")
 async def dashboard_designs():
     return {"designs": list_designs()}
@@ -986,6 +1222,50 @@ async def dashboard_designs():
 async def upsert_dashboard_design(request: DesignRequest):
     design = save_design(request.model_dump())
     app.state.activity_log.log_event("design_saved", f"Saved design {design['name']}", {"slug": design["slug"]})
+    return {"design": design}
+
+
+@app.delete("/api/dashboard/designs/{slug}")
+async def delete_dashboard_design(slug: str):
+    try:
+        result = delete_design(slug)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    app.state.activity_log.log_event("design_deleted", f"Deleted design {slug}", {"slug": slug})
+    return result
+
+
+@app.post("/api/dashboard/designs/draft")
+async def draft_dashboard_design(request: DesignDraftRequest):
+    runtime = app.state.local_runtime
+    if not runtime.status().get("ready"):
+        raise HTTPException(status_code=503, detail="Local GGUF runtime is not ready. Start the local runtime first.")
+    goal = request.goal.strip()
+    if not goal:
+        raise HTTPException(status_code=400, detail="A plain-language goal is required.")
+
+    prompt = build_design_draft_prompt(goal)
+    try:
+        response = runtime.chat(
+            [{"role": "user", "content": prompt}],
+            temperature=max(0.0, min(request.temperature, 1.0)),
+            max_tokens=max(128, min(request.max_tokens, 1600)),
+            system_prompt="Return valid JSON only.",
+        )
+        draft_payload = extract_json_object(response.get("text", "") or "")
+        design = save_design(_coerce_design_draft_payload(draft_payload, goal))
+    except RuntimeError as exc:
+        app.state.activity_log.log_event("design_draft_error", "GGUF design drafting failed", {"error": str(exc)})
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        app.state.activity_log.log_event("design_draft_error", "GGUF design draft was invalid", {"error": str(exc)})
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    app.state.activity_log.log_event(
+        "design_drafted",
+        f"Drafted design {design['name']} from plain-language goal",
+        {"slug": design["slug"], "goal": goal},
+    )
     return {"design": design}
 
 
@@ -1168,6 +1448,9 @@ async def corpus_file(path: str):
 @app.post("/api/corpus/write")
 async def corpus_write(request: SandboxWriteRequest):
     try:
+        if Path(request.path).suffix.lower() == ".parquet":
+            records = request.records or _extract_corpus_records({"content": request.content})
+            return app.state.corpus.write_parquet_file(request.path, records, mode=request.mode)
         return app.state.corpus.write_file(request.path, request.content)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1187,7 +1470,7 @@ async def corpus_delete(request: SandboxDeleteRequest):
 async def corpus_copy_from_sandbox(request: WorkspaceCopyRequest):
     try:
         source = app.state.sandbox.read_file(request.source_path)
-        result = app.state.corpus.write_file(request.target_path, source["content"])
+        result = app.state.corpus.write_from_content(request.target_path, source["content"], mode="overwrite")
         app.state.activity_log.log_event(
             "corpus_copy",
             f"Copied sandbox file {request.source_path} into corpus file {result['path']}",

@@ -14,6 +14,10 @@ That means it assumes you may be new to:
 
 If you are feeling unsure, that is expected. Start small, follow the workflow in order, and treat this as a practical workbench rather than a magic one-click trainer.
 
+If you want the most beginner-friendly setup guide with dependency commands, search suggestions, and an end-to-end walkthrough of each dashboard area, read:
+
+- [ZERO_EXPERIENCE_END_TO_END_GUIDE.md](ZERO_EXPERIENCE_END_TO_END_GUIDE.md)
+
 ## What This Is
 
 This project is a local-only LLM builder and assistant workspace.
@@ -120,6 +124,7 @@ You do not need deep ML knowledge to begin, but you do need a few practical thin
 - Vulkan-capable GPU for the local runtime assistant
 - CUDA or MPS for faster training if your system supports it
 - `pyarrow` only if you want to use `.parquet` files in the corpus
+- Microsoft Visual Studio Build Tools with the Desktop C++ workload if you plan to do local Windows CPU training
 
 ### Important Expectation
 
@@ -163,6 +168,14 @@ Available runtime strategies:
 
 - `cpu`
   CPU only.
+
+On Windows, the PowerShell launcher also tries to detect and load the Visual Studio x64 developer environment before starting the app.
+
+Practical meaning:
+
+- if Visual Studio Build Tools are installed, local CPU training has a better chance of compiling cleanly
+- this is especially helpful for CPU `torch.compile` paths that expect a working C/C++ toolchain
+- if Build Tools are not installed, the launcher still starts, but CPU training may be more limited or may fail later during compile steps
 
 When the server starts, open `http://localhost:8000`.
 
@@ -244,6 +257,24 @@ What to check:
 - the runtime binaries exist under `runtime/windows`
 - `auto` may legitimately fall back to CPU if the GPU path never becomes healthy
 
+### 7. CPU training fails on Windows build or compile steps
+
+Symptom:
+
+- tokenizer works but base training fails during a compile/build step
+- logs mention MSVC, cl.exe, link.exe, or C++ build tools
+
+What to check:
+
+- Microsoft Visual Studio Build Tools are installed
+- the Desktop development with C++ workload is installed
+- you relaunched the builder after installing Build Tools
+
+Practical note:
+
+- the launcher will try to load the Visual Studio x64 developer environment automatically
+- if the toolchain is missing, local CPU training can still fail even when Python and PyTorch are installed
+
 ### 6. Hosted inside ChattyCog but nothing appears
 
 Symptom:
@@ -291,6 +322,35 @@ It shows:
 - how many checkpoint families exist
 
 If this section looks wrong, fix that first before starting jobs.
+
+## 1.5. ECG Window
+
+This is the small live activity card directly under the hardware summary.
+
+Its job is simple:
+
+- help you answer `has it crashed?`
+- help you answer `is it actually doing anything?`
+- help you distinguish a quiet machine from a dead one
+
+What it tries to show:
+
+- GPU activity first when local GPU telemetry is available
+- CPU activity if GPU telemetry is not available
+- a truthful builder-level fallback note if hardware telemetry is limited
+
+How to read it:
+
+- a moving trace with changing percentages usually means the machine is doing real work
+- `Live` plus a low number can mean the builder is healthy but simply idle
+- `runtime process up` means the helper runtime is still running even if there is no heavy load at that second
+- if the card stays flat for a long time and the Process Log also stops changing, that is a good reason to investigate
+
+Important caveat:
+
+- this is a liveness window, not a deep profiler
+- a low number does not always mean failure
+- some jobs genuinely have quiet stretches between visible spikes
 
 ## 2. Starting Blueprints
 
@@ -424,6 +484,23 @@ Do not put raw chat fine-tuning files here unless you mean to use them as genera
 - `Document Cap`
 - `Vocab Size`
 
+### Parquet As A First-Class Input
+
+The tokenizer and base-model corpus path can read `.parquet` alongside the text/code formats above.
+
+Use `.parquet` when:
+
+- you already have structured records you want to keep in a columnar format
+- you want the corpus to carry metadata fields more cleanly than loose text files
+- you are converting upstream data-prep outputs into a local training corpus
+
+Requirements:
+
+- install local `pyarrow`
+- make sure the `.parquet` files really live under the configured corpus directory
+
+If `pyarrow` is missing, `.parquet` files are not usable even if they are present on disk.
+
 ### Practical Advice
 
 - start with smaller `Max Characters` if you are only testing the pipeline
@@ -461,6 +538,32 @@ If you are new, stay small:
 - prefer CPU-safe or small-GPU-safe settings
 - finish a short run before attempting a bigger one
 
+### Hardware-Fit Guidance
+
+The dashboard includes a hardware-fit pass meant to keep local runs realistic.
+
+Use it before long runs when you are unsure about your machine.
+
+What it is trying to do:
+
+- detect the hardware the host actually has
+- recommend safer batch, sequence, and model-shape settings
+- reduce the chance of avoidable RAM or VRAM exhaustion
+
+Even with auto-fit help, the first manual lever to lower when a run is too heavy is still usually `Device Batch Size`.
+
+### Pause And Resume
+
+Base training supports pause/resume through saved checkpoints.
+
+Practical meaning:
+
+- you can pause a long run without discarding all progress
+- the next resume can continue from the latest saved checkpoint step
+- checkpoint cadence matters, because resume only goes back to the most recent saved checkpoint
+
+If you know you may need to stop and continue later, use a sensible checkpoint save interval instead of saving too rarely.
+
 ## 8. Stage 3: Chat Fine-Tuning
 
 This is where your assistant becomes a chat assistant with the behavior you actually want.
@@ -480,6 +583,16 @@ Typical inputs:
 - create a smaller hold-out `chat_val.jsonl`
 - include the identity file
 - use a small run first
+
+### Resume Expectations
+
+Chat SFT is also designed around checkpoint-based continuation.
+
+That means:
+
+- you should keep checkpoints if you want to continue a useful run later
+- resume is only as good as the latest valid saved checkpoint
+- it is still worth doing a short proof run first before spending hours on a larger pass
 
 ### Why Validation Matters
 
@@ -501,7 +614,42 @@ Use it to:
 - run a stable local benchmark for easier comparison across runs
 - auto-tune the next run settings from prior outcomes
 
-## 10. Managed llama.cpp Server
+## 10. Stage 5: Chat RL
+
+This stage extends the chat pipeline beyond supervised fine-tuning.
+
+Use it only after Chat SFT is already working and you have an SFT checkpoint available to load.
+
+Practical meaning:
+
+- SFT teaches the assistant the basic conversation format and behavior
+- Chat RL is where you experiment with pushing that behavior further
+
+Recommended order:
+
+1. complete Stage 3 Chat SFT
+2. confirm the SFT checkpoint can load
+3. run Chat RL only after the supervised baseline looks sane
+
+If this stage fails immediately, the most likely cause is that the requested SFT checkpoint does not exist yet.
+
+RL continuation also depends on valid saved checkpoints, so treat checkpoint retention as part of the workflow rather than an optional extra if you expect to pause and return later.
+
+## 11. Stage 6: Chat Eval
+
+This is a dedicated evaluation stage for the chat-model side of the pipeline.
+
+Use it when you want a cleaner read on the current SFT or RL-derived chat checkpoint.
+
+It is useful for:
+
+- checking whether a chat checkpoint loads correctly
+- comparing chat-stage runs more consistently
+- getting a repeatable read before or after RL experiments
+
+If this stage fails immediately, the most likely cause is that no SFT checkpoint is available yet.
+
+## 12. Managed llama.cpp Server
 
 This runs your local GGUF assistant.
 
@@ -536,7 +684,7 @@ Use it when you want help with:
 - reading or editing sandbox files
 - launching supported jobs from chat
 
-## 11. Conversation Lab
+## 13. Conversation Lab
 
 This is the main work area for talking to the local assistant.
 
@@ -545,6 +693,9 @@ Every local-runtime request includes:
 - the current builder summary
 - a recent tail of the activity log
 - any sandbox or corpus file you explicitly include
+- a built-in cockpit protocol that reminds the GGUF assistant it is inside llm-tweaker, that it should act as an LLM-building tutor, and that it should return direct answers instead of reasoning-only output
+
+If a model ignores that protocol and emits reasoning-only text anyway, the dashboard will warn you. That is usually a model/prompt-fit issue, not a dashboard crash.
 
 If `Assistant Actions` is enabled, the local assistant can also use local tools.
 
@@ -586,7 +737,7 @@ That workspace boundary is intentional.
 - "Launch chat SFT using the current training files."
 - "Check recent activity and summarize what the last job did."
 
-## 12. assistant_sandbox Files
+## 14. assistant_sandbox Files
 
 This is the assistant's working desk.
 
@@ -606,7 +757,7 @@ That means:
 - the assistant does not automatically read every file in the sandbox
 - you decide what each chat turn is allowed to see
 
-## 13. Sandbox Editor
+## 15. Sandbox Editor
 
 You can create and edit sandbox files directly in the dashboard.
 
@@ -625,7 +776,7 @@ This is a good place to keep:
 - evaluation ideas
 - future training plans
 
-## 14. Process Log
+## 16. Process Log
 
 The process log is one of the most important features for debugging.
 
@@ -870,6 +1021,26 @@ If `auto` fails on GPU, the runtime should fall back to CPU.
 
 If `gpu` is forced and no usable device exists, startup will fail.
 
+## The ECG Window Looks Flat Or Quiet
+
+Check:
+
+- whether the Process Log is still moving
+- whether a job is actually running
+- whether the local runtime is still marked ready
+
+Interpret it like this:
+
+- flat trace plus changing logs usually means the current work is light or bursty, not necessarily broken
+- flat trace plus no log movement for a long time is a better reason to suspect a stall
+- CPU-only systems may show CPU activity instead of GPU activity, which is expected
+
+If you want more confidence, compare three things together:
+
+- ECG window
+- Job Queue status
+- Process Log tail
+
 ## No Models Appear in the Runtime Model List
 
 Check:
@@ -888,6 +1059,8 @@ Check:
 ## Parquet Files Do Not Work
 
 You need local `pyarrow` support for `.parquet`.
+
+For local Windows CPU training, you may also need Microsoft Visual Studio Build Tools with the Desktop C++ workload so compile-based training paths can run correctly.
 
 If you do not want that dependency, convert the data to `.txt`, `.json`, or `.jsonl`.
 

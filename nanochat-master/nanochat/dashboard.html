@@ -316,6 +316,43 @@
             border-color: rgba(182, 75, 51, 0.2);
         }
 
+        .design-tray {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .design-card {
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.72);
+            padding: 14px;
+        }
+
+        .design-card.active {
+            border-color: rgba(15, 109, 106, 0.35);
+            box-shadow: 0 0 0 1px rgba(15, 109, 106, 0.18) inset;
+        }
+
+        .design-card h3 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .design-card p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .design-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
         .card-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -502,6 +539,68 @@
             line-height: 1.55;
         }
 
+        .ecg-window {
+            margin-bottom: 12px;
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(15, 109, 106, 0.18);
+            background:
+                linear-gradient(180deg, rgba(255, 252, 246, 0.95), rgba(246, 238, 223, 0.94));
+        }
+
+        .ecg-window-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .ecg-window-title {
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--signal);
+        }
+
+        .ecg-window-value {
+            font-family: var(--display);
+            font-size: 2rem;
+            line-height: 1;
+            color: var(--ink);
+        }
+
+        .ecg-window-copy {
+            margin-top: 4px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .ecg-trace {
+            width: 100%;
+            height: 96px;
+            margin-top: 14px;
+            display: block;
+            border-radius: 14px;
+            background:
+                linear-gradient(rgba(30, 26, 22, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(30, 26, 22, 0.04) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(15, 109, 106, 0.06), rgba(182, 75, 51, 0.02));
+            background-size: 100% 24px, 28px 100%, 100% 100%;
+        }
+
+        .ecg-window-meta {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .ecg-window-note {
+            margin-top: 10px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
         .fmi-about-panel {
             margin-top: 18px;
             border: 1px solid rgba(15, 109, 106, 0.14);
@@ -683,6 +782,11 @@
             border-color: rgba(182, 75, 51, 0.18);
         }
 
+        .notice.warn {
+            background: rgba(182, 134, 51, 0.16);
+            border-color: rgba(182, 134, 51, 0.24);
+        }
+
         .footer-note {
             margin-top: 12px;
             color: var(--muted);
@@ -840,7 +944,12 @@
                                 not magic defaults.
                             </div>
                         </div>
+                        <div class="button-row">
+                            <button class="btn secondary" id="fitHardwareBtn">Fit To Hardware</button>
+                        </div>
                     </div>
+                    <div class="note-box" id="hardwareSummary" style="margin-bottom: 12px;">Hardware-aware sizing will appear here after the dashboard loads.</div>
+                    <div class="ecg-window" id="ecgWindow">ECG window will appear here after the dashboard loads.</div>
                     <div id="presetList" class="preset-list"></div>
                 </div>
             </div>
@@ -860,6 +969,17 @@
                         </div>
                         <div class="chip-row" id="designSelectRow"></div>
                     </div>
+
+                    <div class="note-box" style="margin-bottom: 16px;">
+                        <div><strong>Draft A Blueprint With The GGUF Helper</strong></div>
+                        <div style="margin-top: 8px;">Describe the assistant you want in plain language. The local GGUF will draft the identity plus starter training settings, then you can review, select, publish, or delete it from the tray.</div>
+                        <textarea id="designGoalPrompt" style="margin-top: 12px;" placeholder="Example: I want to create an LLM that helps me draft careful research summaries, asks for missing context, and never pretends confidence."></textarea>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="draftDesignBtn">Draft With GGUF</button>
+                        </div>
+                    </div>
+
+                    <div class="design-tray" id="designTray"></div>
 
                     <form id="designForm" class="form-grid">
                         <div class="field">
@@ -975,6 +1095,10 @@
                             <label for="tokenizerVocab">Vocab Size</label>
                             <input id="tokenizerVocab" name="vocab_size" data-cast="int" type="number" min="1024" step="512" value="32768">
                         </div>
+                        <div class="field">
+                            <label for="tokenizerEvalDocs">Tokenizer Eval Sample Docs</label>
+                            <input id="tokenizerEvalDocs" name="max_corpus_docs" data-cast="int" type="number" min="1" value="8">
+                        </div>
                     </form>
 
                     <div class="button-row">
@@ -1061,10 +1185,96 @@
                         </div>
                     </form>
 
+                    <details class="fmi-about-panel" style="margin-top: 14px;">
+                        <summary>Advanced Base Train Controls</summary>
+                        <form id="baseTrainAdvancedForm" class="form-grid" style="margin-top: 14px;">
+                            <div class="field">
+                                <label for="baseAspectRatio">Aspect Ratio</label>
+                                <input id="baseAspectRatio" name="aspect_ratio" data-cast="int" type="number" min="1" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseTargetFlops">Target FLOPs (optional)</label>
+                                <input id="baseTargetFlops" name="target_flops" data-cast="float" type="number" step="any" placeholder="Leave blank to use iterations">
+                            </div>
+                            <div class="field">
+                                <label for="baseTargetRatio">Target Param:Data Ratio</label>
+                                <input id="baseTargetRatio" name="target_param_data_ratio" data-cast="float" type="number" step="0.1" placeholder="Leave blank to keep script default">
+                            </div>
+                            <div class="field">
+                                <label for="baseResumeFromStep">Resume From Step</label>
+                                <input id="baseResumeFromStep" name="resume_from_step" data-cast="int" type="number" min="1" placeholder="Optional">
+                            </div>
+                            <div class="field">
+                                <label for="baseSaveEvery">Save Every</label>
+                                <input id="baseSaveEvery" name="save_every" data-cast="int" type="number" min="1" placeholder="Optional">
+                            </div>
+                            <div class="field">
+                                <label for="baseEmbeddingLr">Embedding LR</label>
+                                <input id="baseEmbeddingLr" name="embedding_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseUnembeddingLr">Unembedding LR</label>
+                                <input id="baseUnembeddingLr" name="unembedding_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseMatrixLr">Matrix LR</label>
+                                <input id="baseMatrixLr" name="matrix_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseScalarLr">Scalar LR</label>
+                                <input id="baseScalarLr" name="scalar_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseWeightDecay">Weight Decay</label>
+                                <input id="baseWeightDecay" name="weight_decay" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseAdamBeta1">Adam Beta1</label>
+                                <input id="baseAdamBeta1" name="adam_beta1" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseAdamBeta2">Adam Beta2</label>
+                                <input id="baseAdamBeta2" name="adam_beta2" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseWarmupRatio">Warmup Ratio</label>
+                                <input id="baseWarmupRatio" name="warmup_ratio" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseWarmdownRatio">Warmdown Ratio</label>
+                                <input id="baseWarmdownRatio" name="warmdown_ratio" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseFinalLrFrac">Final LR Fraction</label>
+                                <input id="baseFinalLrFrac" name="final_lr_frac" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseCoreMaxPerTask">Core Metric Max Per Task</label>
+                                <input id="baseCoreMaxPerTask" name="core_metric_max_per_task" data-cast="int" type="number" min="1" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="baseFp8">FP8 Training</label>
+                                <select id="baseFp8" name="fp8" data-cast="int">
+                                    <option value="0">off</option>
+                                    <option value="1">on</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="baseFp8Recipe">FP8 Recipe</label>
+                                <select id="baseFp8Recipe" name="fp8_recipe">
+                                    <option value="">default</option>
+                                    <option value="tensorwise">tensorwise</option>
+                                    <option value="rowwise">rowwise</option>
+                                </select>
+                            </div>
+                        </form>
+                    </details>
+
                     <div class="button-row">
                         <button class="btn primary" data-job="base_train" data-form="baseTrainForm">Launch Base Training</button>
                         <button class="btn secondary" data-job="base_eval" data-form="baseEvalForm">Run Base Eval</button>
                     </div>
+                    <div class="note-box" id="baseCheckpointInfo" style="margin-top: 12px;">Base checkpoint guidance will appear here after the dashboard loads.</div>
                 </div>
             </div>
         </section>
@@ -1146,9 +1356,67 @@
                         </div>
                     </form>
 
+                    <details class="fmi-about-panel" style="margin-top: 14px;">
+                        <summary>Advanced SFT Controls</summary>
+                        <form id="chatSftAdvancedForm" class="form-grid" style="margin-top: 14px;">
+                            <div class="field full">
+                                <label for="sftIdentityFile">Identity File Override</label>
+                                <input id="sftIdentityFile" name="identity_file" type="text" placeholder="Optional custom identity JSONL path">
+                            </div>
+                            <div class="field">
+                                <label for="sftResumeFromStep">Resume From SFT Step</label>
+                                <input id="sftResumeFromStep" name="resume_from_step" data-cast="int" type="number" min="1" placeholder="Optional">
+                            </div>
+                            <div class="field">
+                                <label for="sftSaveEvery">Save Every</label>
+                                <input id="sftSaveEvery" name="save_every" data-cast="int" type="number" min="1" placeholder="Recommended for long local runs">
+                            </div>
+                            <div class="field">
+                                <label for="sftChatcoreEvery">ChatCore Every</label>
+                                <input id="sftChatcoreEvery" name="chatcore_every" data-cast="int" type="number" value="-1">
+                            </div>
+                            <div class="field">
+                                <label for="sftLoadOptimizer">Warm-Start Optimizer</label>
+                                <select id="sftLoadOptimizer" name="load_optimizer" data-cast="int">
+                                    <option value="1">yes</option>
+                                    <option value="0">no</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="sftEmbeddingLr">Embedding LR</label>
+                                <input id="sftEmbeddingLr" name="embedding_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftUnembeddingLr">Unembedding LR</label>
+                                <input id="sftUnembeddingLr" name="unembedding_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftMatrixLr">Matrix LR</label>
+                                <input id="sftMatrixLr" name="matrix_lr" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftInitLrFrac">Init LR Fraction</label>
+                                <input id="sftInitLrFrac" name="init_lr_frac" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftWarmupRatio">Warmup Ratio</label>
+                                <input id="sftWarmupRatio" name="warmup_ratio" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftWarmdownRatio">Warmdown Ratio</label>
+                                <input id="sftWarmdownRatio" name="warmdown_ratio" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                            <div class="field">
+                                <label for="sftFinalLrFrac">Final LR Fraction</label>
+                                <input id="sftFinalLrFrac" name="final_lr_frac" data-cast="float" type="number" step="any" placeholder="Optional override">
+                            </div>
+                        </form>
+                    </details>
+
                     <div class="button-row">
                         <button class="btn primary" data-job="chat_sft" data-form="chatSftForm">Launch Chat SFT</button>
                     </div>
+                    <div class="note-box" id="sftCheckpointInfo" style="margin-top: 12px;">SFT checkpoint guidance will appear here after the dashboard loads.</div>
                 </div>
             </div>
 
@@ -1160,6 +1428,9 @@
                         <p class="lead">
                             Keep evaluation short while iterating. This local-only check measures BPB on your corpus and samples from the checkpoint, and the benchmark button keeps that config stable so results are easier to compare across runs.
                         </p>
+                        <div class="note-box" style="margin-top: 12px;">
+                            This fork runs in local-only mode. Base eval here supports local checkpoint BPB and sampling, but not HuggingFace model paths or CORE bundle evaluation.
+                        </div>
                     </div>
 
                     <form id="baseEvalForm" class="form-grid">
@@ -1211,6 +1482,188 @@
             </div>
         </section>
 
+        <section class="pipeline">
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 5</div>
+                        <h2>Chat RL</h2>
+                        <p class="lead">
+                            This launches the built-in reinforcement learning path on top of an SFT checkpoint. It is more advanced than SFT and usually makes sense only after you already have a usable SFT model.
+                        </p>
+                        <div class="note-box" style="margin-top: 12px;">
+                            Recommended order: tokenizer -> base train -> chat SFT -> chat eval -> chat RL. If you are new, treat RL as an optimization step, not the starting point.
+                        </div>
+                    </div>
+
+                    <form id="chatRlForm" class="form-grid">
+                        <div class="field">
+                            <label for="rlModelTag">SFT Model Tag (optional)</label>
+                            <input id="rlModelTag" name="model_tag" type="text" placeholder="Leave blank for latest">
+                        </div>
+                        <div class="field">
+                            <label for="rlModelStep">SFT Model Step (optional)</label>
+                            <input id="rlModelStep" name="model_step" data-cast="int" type="number" min="1" placeholder="Last step by default">
+                        </div>
+                        <div class="field">
+                            <label for="rlResumeFromStep">Resume From RL Step</label>
+                            <input id="rlResumeFromStep" name="resume_from_step" data-cast="int" type="number" min="1" placeholder="Optional">
+                        </div>
+                        <div class="field">
+                            <label for="rlNumEpochs">Epochs</label>
+                            <input id="rlNumEpochs" name="num_epochs" data-cast="int" type="number" min="1" value="1">
+                        </div>
+                        <div class="field">
+                            <label for="rlDeviceBatch">Device Batch Size</label>
+                            <input id="rlDeviceBatch" name="device_batch_size" data-cast="int" type="number" min="1" value="8">
+                        </div>
+                        <div class="field">
+                            <label for="rlExamplesPerStep">Examples Per Step</label>
+                            <input id="rlExamplesPerStep" name="examples_per_step" data-cast="int" type="number" min="1" value="16">
+                        </div>
+                        <div class="field">
+                            <label for="rlNumSamples">Samples Per Example</label>
+                            <input id="rlNumSamples" name="num_samples" data-cast="int" type="number" min="1" value="16">
+                        </div>
+                        <div class="field">
+                            <label for="rlMaxNewTokens">Max New Tokens</label>
+                            <input id="rlMaxNewTokens" name="max_new_tokens" data-cast="int" type="number" min="1" value="256">
+                        </div>
+                        <div class="field">
+                            <label for="rlTemperature">Temperature</label>
+                            <input id="rlTemperature" name="temperature" data-cast="float" type="number" min="0" step="0.1" value="1.0">
+                        </div>
+                        <div class="field">
+                            <label for="rlTopK">Top-k</label>
+                            <input id="rlTopK" name="top_k" data-cast="int" type="number" min="0" value="50">
+                        </div>
+                        <div class="field">
+                            <label for="rlEmbeddingLr">Embedding LR</label>
+                            <input id="rlEmbeddingLr" name="embedding_lr" data-cast="float" type="number" step="any" value="0.2">
+                        </div>
+                        <div class="field">
+                            <label for="rlUnembeddingLr">Unembedding LR</label>
+                            <input id="rlUnembeddingLr" name="unembedding_lr" data-cast="float" type="number" step="any" value="0.004">
+                        </div>
+                        <div class="field">
+                            <label for="rlMatrixLr">Matrix LR</label>
+                            <input id="rlMatrixLr" name="matrix_lr" data-cast="float" type="number" step="any" value="0.02">
+                        </div>
+                        <div class="field">
+                            <label for="rlWeightDecay">Weight Decay</label>
+                            <input id="rlWeightDecay" name="weight_decay" data-cast="float" type="number" step="any" value="0.0">
+                        </div>
+                        <div class="field">
+                            <label for="rlInitLrFrac">Init LR Fraction</label>
+                            <input id="rlInitLrFrac" name="init_lr_frac" data-cast="float" type="number" step="any" value="0.05">
+                        </div>
+                        <div class="field">
+                            <label for="rlEvalEvery">Eval Every</label>
+                            <input id="rlEvalEvery" name="eval_every" data-cast="int" type="number" min="1" value="60">
+                        </div>
+                        <div class="field">
+                            <label for="rlEvalExamples">Eval Examples</label>
+                            <input id="rlEvalExamples" name="eval_examples" data-cast="int" type="number" min="1" value="400">
+                        </div>
+                        <div class="field">
+                            <label for="rlSaveEvery">Save Every</label>
+                            <input id="rlSaveEvery" name="save_every" data-cast="int" type="number" min="1" value="60">
+                        </div>
+                        <div class="field">
+                            <label for="rlDeviceType">Device Type</label>
+                            <select id="rlDeviceType" name="device_type">
+                                <option value="cpu">cpu</option>
+                                <option value="cuda">cuda</option>
+                                <option value="mps">mps</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="rlRunName">Run Name</label>
+                            <input id="rlRunName" name="run" type="text" value="builder-rl">
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn primary" data-job="chat_rl" data-form="chatRlForm">Launch Chat RL</button>
+                    </div>
+                    <div class="note-box" id="rlCheckpointInfo" style="margin-top: 12px;">RL checkpoint guidance will appear here after the dashboard loads.</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-inner recipe-card">
+                    <div>
+                        <div class="section-kicker">Stage 6</div>
+                        <h2>Chat Eval</h2>
+                        <p class="lead">
+                            This runs the built-in chat-model evaluation tasks against SFT or RL checkpoints. Use it to measure real task behavior instead of relying only on casual chat impressions.
+                        </p>
+                        <div class="note-box" style="margin-top: 12px;">
+                            Available task names include `ARC-Easy`, `ARC-Challenge`, `MMLU`, `GSM8K`, `HumanEval`, and `SpellingBee`. Leave the task field blank to run the full built-in set.
+                        </div>
+                    </div>
+
+                    <form id="chatEvalForm" class="form-grid">
+                        <div class="field">
+                            <label for="chatEvalSource">Source</label>
+                            <select id="chatEvalSource" name="source">
+                                <option value="sft">sft</option>
+                                <option value="rl">rl</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalModelTag">Model Tag (optional)</label>
+                            <input id="chatEvalModelTag" name="model_tag" type="text" placeholder="Leave blank for latest">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalStep">Step (optional)</label>
+                            <input id="chatEvalStep" name="step" data-cast="int" type="number" min="1">
+                        </div>
+                        <div class="field full">
+                            <label for="chatEvalTaskName">Task Name(s)</label>
+                            <input id="chatEvalTaskName" name="task_name" type="text" placeholder="Blank = all tasks, or use ARC-Easy|MMLU|GSM8K">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalTemperature">Temperature</label>
+                            <input id="chatEvalTemperature" name="temperature" data-cast="float" type="number" min="0" step="0.1" value="0.0">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalMaxNewTokens">Max New Tokens</label>
+                            <input id="chatEvalMaxNewTokens" name="max_new_tokens" data-cast="int" type="number" min="1" value="512">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalNumSamples">Num Samples</label>
+                            <input id="chatEvalNumSamples" name="num_samples" data-cast="int" type="number" min="1" value="1">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalTopK">Top-k</label>
+                            <input id="chatEvalTopK" name="top_k" data-cast="int" type="number" min="0" value="50">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalBatchSize">Batch Size</label>
+                            <input id="chatEvalBatchSize" name="batch_size" data-cast="int" type="number" min="1" value="8">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalMaxProblems">Max Problems (optional)</label>
+                            <input id="chatEvalMaxProblems" name="max_problems" data-cast="int" type="number" min="1" placeholder="Optional">
+                        </div>
+                        <div class="field">
+                            <label for="chatEvalDeviceType">Device Type</label>
+                            <select id="chatEvalDeviceType" name="device_type">
+                                <option value="cpu">cpu</option>
+                                <option value="cuda">cuda</option>
+                                <option value="mps">mps</option>
+                            </select>
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn secondary" data-job="chat_eval" data-form="chatEvalForm">Run Chat Eval</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="jobs-layout">
             <div class="panel">
                 <div class="panel-inner">
@@ -1234,6 +1687,10 @@
                         </div>
                         <div class="button-row">
                             <button class="btn secondary" id="refreshJobBtn">Refresh Job</button>
+                            <button class="btn secondary" id="pauseJobBtn">Pause Job</button>
+                            <button class="btn ghost" id="resumeJobBtn">Resume Job</button>
+                            <button class="btn ghost" id="copyResumeBtn">Copy Resume To Form</button>
+                            <button class="btn ghost" id="useCheckpointBtn">Use Checkpoint In Eval/Load</button>
                             <button class="btn signal" id="stopJobBtn">Stop Job</button>
                         </div>
                     </div>
@@ -1283,6 +1740,7 @@
                     <div class="button-row">
                         <button class="btn primary" id="loadChatBtn">Load Chat Model</button>
                         <button class="btn ghost" id="latestSftBtn">Load Latest SFT</button>
+                        <button class="btn ghost" id="latestRlBtn">Load Latest RL</button>
                     </div>
 
                     <div class="note-box" id="chatStatusBox">Chat runtime status will appear here.</div>
@@ -1361,6 +1819,104 @@
                     </div>
 
                     <div class="note-box" id="runtimeStatusBox">Local runtime status will appear here.</div>
+
+                    <div class="section-head" style="margin-top: 10px;">
+                        <div>
+                            <div class="section-kicker">Cockpit</div>
+                            <h2>Assistant Controls</h2>
+                            <div class="section-copy">
+                                This is the live operator surface for the helper assistant: backend profile, reply budget, sampling knobs, action mode, and the assistant charter.
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="cockpitForm" class="form-grid">
+                        <div class="field">
+                            <label for="cockpitBackendProfile">Backend / Model Profile</label>
+                            <select id="cockpitBackendProfile">
+                                <option value="local_runtime">local runtime assistant</option>
+                                <option value="internal_current">internal chat (current load)</option>
+                                <option value="internal_latest_sft">internal chat (load latest SFT)</option>
+                                <option value="internal_latest_rl">internal chat (load latest RL)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="cockpitTemperature">Temperature</label>
+                            <input id="cockpitTemperature" type="number" min="0" step="0.1" value="0.2">
+                        </div>
+                        <div class="field">
+                            <label for="cockpitTopK">Top-k</label>
+                            <input id="cockpitTopK" type="number" min="0" value="40">
+                        </div>
+                        <div class="field">
+                            <label for="cockpitMaxTokens">Max Tokens</label>
+                            <input id="cockpitMaxTokens" type="number" min="1" value="512">
+                        </div>
+                        <div class="field">
+                            <label for="cockpitAssistantActions">Assistant Actions</label>
+                            <select id="cockpitAssistantActions">
+                                <option value="1">enabled</option>
+                                <option value="0">disabled</option>
+                            </select>
+                        </div>
+                        <div class="field full">
+                            <label for="cockpitSystemPrompt">Cockpit Protocol / System Prompt</label>
+                            <textarea id="cockpitSystemPrompt">You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.</textarea>
+                        </div>
+                    </form>
+
+                    <div class="button-row">
+                        <button class="btn secondary" id="applyCockpitBtn">Apply Cockpit To Bench</button>
+                        <button class="btn ghost" id="activateCockpitProfileBtn">Activate Backend Profile</button>
+                        <button class="btn ghost" id="resetOperatorControlsBtn">Reset Saved Controls</button>
+                    </div>
+
+                    <div class="note-box" id="cockpitStatusBox" style="margin-top: 12px;">Cockpit settings will appear here.</div>
+
+                    <div class="section-head" style="margin-top: 10px;">
+                        <div>
+                            <div class="section-kicker">Quick Prompt</div>
+                            <h2>Single-Turn Smoke Test</h2>
+                            <div class="section-copy">
+                                This is the dashboard equivalent of a one-shot <code>chat_cli.py -p</code> run: one prompt in, one answer back, without building up a conversation history.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="quickPromptProvider">Provider</label>
+                            <select id="quickPromptProvider">
+                                <option value="internal_nanochat">internal nanochat</option>
+                                <option value="local_runtime">local runtime</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="quickPromptTemperature">Temperature</label>
+                            <input id="quickPromptTemperature" type="number" min="0" step="0.1" value="0.6">
+                        </div>
+                        <div class="field">
+                            <label for="quickPromptTopK">Top-k</label>
+                            <input id="quickPromptTopK" type="number" min="0" value="50">
+                        </div>
+                        <div class="field">
+                            <label for="quickPromptMaxTokens">Max Tokens</label>
+                            <input id="quickPromptMaxTokens" type="number" min="1" value="256">
+                        </div>
+                        <div class="field full">
+                            <label for="quickPromptInput">Prompt</label>
+                            <textarea id="quickPromptInput" placeholder="Ask one direct question to smoke-test the currently loaded model."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="button-row">
+                        <button class="btn primary" id="runQuickPromptBtn">Run Quick Prompt</button>
+                        <button class="btn secondary" id="copyQuickPromptToChatBtn">Copy To Conversation Lab</button>
+                        <button class="btn ghost" id="clearQuickPromptBtn">Clear</button>
+                    </div>
+
+                    <div class="note-box" id="quickPromptMeta" style="margin-top: 12px;">Quick prompt output will appear here. Provider and sampling defaults are synced from the cockpit when you apply it.</div>
+                    <textarea id="quickPromptOutput" class="log-box" readonly style="margin-top: 12px;" placeholder="Single-turn response output appears here."></textarea>
                 </div>
             </div>
 
@@ -1487,11 +2043,15 @@
                     <div class="form-grid">
                         <div class="field full">
                             <label for="corpusPath">Corpus Path</label>
-                            <input id="corpusPath" type="text" placeholder="train/reference.txt">
+                            <input id="corpusPath" type="text" placeholder="train/reference.txt or train/reference.parquet">
                         </div>
                     </div>
                     <div class="note-box" id="corpusMeta" style="margin-top: 12px;">Select a corpus file from the left or create a new one here.</div>
-                    <textarea id="corpusEditor" class="log-box" style="margin-top: 12px;" placeholder="Draft local text, JSON, or JSONL corpus content here."></textarea>
+                    <textarea id="corpusEditor" class="log-box" style="margin-top: 12px;" placeholder="Draft local text, JSON, JSONL, or a JSON array of records for a new .parquet file here."></textarea>
+                    <div class="note-box" style="margin-top: 12px;">
+                        Parquet corpus files expect one JSON object per row. A JSON array of objects or JSONL object rows will work.
+                        Files like chat datasets that store arrays per line are valid for SFT, but they are not valid corpus parquet rows.
+                    </div>
                     <div class="button-row" style="margin-top: 12px;">
                         <button class="btn primary" id="saveCorpusBtn">Save File</button>
                         <button class="btn secondary" id="loadCorpusBtn">Load File</button>
@@ -1524,20 +2084,29 @@
 
     <script>
         const STARTUP_SPLASH_DURATION_MS = 3000;
+        const COCKPIT_STORAGE_KEY = "llm_tweaker_cockpit_settings_v1";
+        const RUNTIME_FORM_STORAGE_KEY = "llm_tweaker_runtime_form_v1";
         const state = {
             bootstrap: null,
+            ecg: null,
             selectedPreset: null,
             selectedDesignSlug: null,
+            lastAppliedDesignSlug: null,
             selectedJobId: null,
             selectedJob: null,
             selectedSandboxPath: "",
             selectedCorpusPath: "",
             chatMessages: [],
             pollingHandle: null,
+            ecgPollingHandle: null,
             isSendingChat: false,
+            isRunningQuickPrompt: false,
             designDirty: false,
             forceDesignPopulate: true,
             lastAssistantReply: "",
+            lastTelemetry: null,
+            corpusEditorMode: "text",
+            runtimeDefaultsApplied: false,
         };
 
         const startupSplashEl = document.getElementById("startupSplash");
@@ -1546,7 +2115,13 @@
 
         const noticeEl = document.getElementById("notice");
         const presetListEl = document.getElementById("presetList");
+        const hardwareSummaryEl = document.getElementById("hardwareSummary");
+        const ecgWindowEl = document.getElementById("ecgWindow");
+        const baseCheckpointInfoEl = document.getElementById("baseCheckpointInfo");
+        const sftCheckpointInfoEl = document.getElementById("sftCheckpointInfo");
+        const rlCheckpointInfoEl = document.getElementById("rlCheckpointInfo");
         const designSelectRowEl = document.getElementById("designSelectRow");
+        const designTrayEl = document.getElementById("designTray");
         const identityPreviewEl = document.getElementById("identityPreview");
         const jobsListEl = document.getElementById("jobsList");
         const jobSummaryEl = document.getElementById("jobSummary");
@@ -1555,6 +2130,13 @@
         const chatMessagesEl = document.getElementById("chatMessages");
         const chatInputEl = document.getElementById("chatInput");
         const chatStatusBoxEl = document.getElementById("chatStatusBox");
+        const cockpitBackendProfileEl = document.getElementById("cockpitBackendProfile");
+        const cockpitTemperatureEl = document.getElementById("cockpitTemperature");
+        const cockpitTopKEl = document.getElementById("cockpitTopK");
+        const cockpitMaxTokensEl = document.getElementById("cockpitMaxTokens");
+        const cockpitAssistantActionsEl = document.getElementById("cockpitAssistantActions");
+        const cockpitSystemPromptEl = document.getElementById("cockpitSystemPrompt");
+        const cockpitStatusBoxEl = document.getElementById("cockpitStatusBox");
         const runtimeStatusBoxEl = document.getElementById("runtimeStatusBox");
         const runtimeModelSelectEl = document.getElementById("runtimeModelSelect");
         const runtimeModelMetaEl = document.getElementById("runtimeModelMeta");
@@ -1563,6 +2145,13 @@
         const chatProviderEl = document.getElementById("chatProvider");
         const assistantToolsEnabledEl = document.getElementById("assistantToolsEnabled");
         const runtimeSystemPromptEl = document.getElementById("runtimeSystemPrompt");
+        const quickPromptProviderEl = document.getElementById("quickPromptProvider");
+        const quickPromptTemperatureEl = document.getElementById("quickPromptTemperature");
+        const quickPromptTopKEl = document.getElementById("quickPromptTopK");
+        const quickPromptMaxTokensEl = document.getElementById("quickPromptMaxTokens");
+        const quickPromptInputEl = document.getElementById("quickPromptInput");
+        const quickPromptMetaEl = document.getElementById("quickPromptMeta");
+        const quickPromptOutputEl = document.getElementById("quickPromptOutput");
         const sandboxFilesEl = document.getElementById("sandboxFiles");
         const sandboxPathEl = document.getElementById("sandboxPath");
         const sandboxEditorEl = document.getElementById("sandboxEditor");
@@ -1574,6 +2163,10 @@
         const benchmarkSummaryEl = document.getElementById("benchmarkSummary");
         const activityMetaEl = document.getElementById("activityMeta");
         const activityLogEl = document.getElementById("activityLog");
+        const pauseJobBtnEl = document.getElementById("pauseJobBtn");
+        const resumeJobBtnEl = document.getElementById("resumeJobBtn");
+        const copyResumeBtnEl = document.getElementById("copyResumeBtn");
+        const useCheckpointBtnEl = document.getElementById("useCheckpointBtn");
 
         function dismissStartupSplash() {
             if (startupSplashDismissed || !startupSplashEl) return;
@@ -1780,12 +2373,45 @@
             return cleaned;
         }
 
+        function saveRuntimeFormSettings() {
+            try {
+                window.localStorage.setItem(
+                    RUNTIME_FORM_STORAGE_KEY,
+                    JSON.stringify(cleanOptionalPayload(serializeForm("runtimeForm"))),
+                );
+            } catch (error) {
+                console.warn("Unable to persist runtime form settings", error);
+            }
+        }
+
+        function loadRuntimeFormSettings() {
+            try {
+                const raw = window.localStorage.getItem(RUNTIME_FORM_STORAGE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (!saved || typeof saved !== "object") return;
+                fillForm("runtimeForm", saved);
+            } catch (error) {
+                console.warn("Unable to load runtime form settings", error);
+            }
+        }
+
+        function clearRuntimeFormSettings() {
+            try {
+                window.localStorage.removeItem(RUNTIME_FORM_STORAGE_KEY);
+            } catch (error) {
+                console.warn("Unable to clear runtime form settings", error);
+            }
+        }
+
         function currentFormsSnapshot() {
             return {
                 tokenizerForm: cleanOptionalPayload(serializeForm("tokenizerForm")),
-                baseTrainForm: cleanOptionalPayload(serializeForm("baseTrainForm")),
-                chatSftForm: cleanOptionalPayload(serializeForm("chatSftForm")),
+                baseTrainForm: cleanOptionalPayload({ ...serializeForm("baseTrainForm"), ...serializeForm("baseTrainAdvancedForm") }),
+                chatSftForm: cleanOptionalPayload({ ...serializeForm("chatSftForm"), ...serializeForm("chatSftAdvancedForm") }),
                 baseEvalForm: cleanOptionalPayload(serializeForm("baseEvalForm")),
+                chatRlForm: cleanOptionalPayload(serializeForm("chatRlForm")),
+                chatEvalForm: cleanOptionalPayload(serializeForm("chatEvalForm")),
             };
         }
 
@@ -1793,8 +2419,141 @@
             if (!recommendedForms) return;
             if (recommendedForms.tokenizerForm) fillForm("tokenizerForm", recommendedForms.tokenizerForm);
             if (recommendedForms.baseTrainForm) fillForm("baseTrainForm", recommendedForms.baseTrainForm);
+            if (recommendedForms.baseTrainForm) fillForm("baseTrainAdvancedForm", recommendedForms.baseTrainForm);
             if (recommendedForms.chatSftForm) fillForm("chatSftForm", recommendedForms.chatSftForm);
+            if (recommendedForms.chatSftForm) fillForm("chatSftAdvancedForm", recommendedForms.chatSftForm);
             if (recommendedForms.baseEvalForm) fillForm("baseEvalForm", recommendedForms.baseEvalForm);
+            if (recommendedForms.chatRlForm) fillForm("chatRlForm", recommendedForms.chatRlForm);
+            if (recommendedForms.chatEvalForm) fillForm("chatEvalForm", recommendedForms.chatEvalForm);
+            if (recommendedForms.runtimeForm) fillForm("runtimeForm", recommendedForms.runtimeForm);
+        }
+
+        function renderHardwareSummary(builder) {
+            const summary = builder.hardware_recommendations && builder.hardware_recommendations.summary;
+            const profile = builder.hardware_profile || {};
+            const recommendations = builder.hardware_recommendations || {};
+            const basePlan = recommendations.baseTrainForm || {};
+            const sftPlan = recommendations.chatSftForm || {};
+            const runtimePlan = recommendations.runtimeForm || {};
+            const gpuNames = (profile.gpus || []).map((gpu) => `${gpu.name} (${gpu.memory_gb} GB)`);
+            const lines = [
+                summary ? `<strong>${escapeHtml(summary.title)}</strong>` : "<strong>Hardware fit</strong>",
+                `Preferred device: ${escapeHtml(profile.preferred_device || "cpu")}`,
+                gpuNames.length ? `Detected GPUs: ${escapeHtml(gpuNames.join(", "))}` : "Detected GPUs: none",
+                profile.system_ram_gb ? `System RAM: ${escapeHtml(String(profile.system_ram_gb))} GB` : "System RAM: unavailable",
+                runtimePlan.ctx_size ? `Runtime starter: ctx ${escapeHtml(String(runtimePlan.ctx_size))}, threads ${escapeHtml(String(runtimePlan.threads || "?"))}, HTTP ${escapeHtml(String(runtimePlan.threads_http || "?"))}, slots ${escapeHtml(String(runtimePlan.parallel || "?"))}` : "",
+                basePlan.depth ? `Base starter: depth ${escapeHtml(String(basePlan.depth))}, seq ${escapeHtml(String(basePlan.max_seq_len || "?"))}, device batch ${escapeHtml(String(basePlan.device_batch_size || "?"))}, save every ${escapeHtml(String(basePlan.save_every || "?"))}` : "",
+                sftPlan.max_seq_len ? `SFT starter: seq ${escapeHtml(String(sftPlan.max_seq_len))}, device batch ${escapeHtml(String(sftPlan.device_batch_size || "?"))}, save every ${escapeHtml(String(sftPlan.save_every || "?"))}` : "",
+                summary && summary.notes ? escapeHtml(summary.notes.join(" | ")) : "The dashboard can size starter runs to be safer on local hardware.",
+            ].filter(Boolean);
+            hardwareSummaryEl.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+        }
+
+        function describeEcgStatus(ecg) {
+            if (!ecg || !ecg.status) return "idle";
+            return String(ecg.status).replace(/-/g, " ");
+        }
+
+        function buildEcgTracePoints(history, width = 360, height = 96) {
+            const values = Array.isArray(history) && history.length ? history : [0, 0, 0, 0];
+            if (values.length === 1) {
+                const y = height - 6 - ((Math.max(0, Math.min(100, Number(values[0]) || 0)) / 100) * (height - 12));
+                return `0,${y} ${width},${y}`;
+            }
+            return values.map((value, index) => {
+                const pct = Math.max(0, Math.min(100, Number(value) || 0));
+                const x = (index / (values.length - 1)) * width;
+                const y = height - 6 - ((pct / 100) * (height - 12));
+                return `${x.toFixed(2)},${y.toFixed(2)}`;
+            }).join(" ");
+        }
+
+        function renderEcgWindow(ecg) {
+            if (!ecgWindowEl) return;
+            if (!ecg) {
+                ecgWindowEl.innerHTML = "ECG window will appear here after the dashboard loads.";
+                return;
+            }
+            const percent = Math.max(0, Math.min(100, Number(ecg.current_percent) || 0));
+            const trace = buildEcgTracePoints(ecg.history || []);
+            const chips = [
+                `<span class="chip ${percent >= 70 ? "warn" : "good"}">${escapeHtml(describeEcgStatus(ecg))}</span>`,
+                `<span class="chip">${escapeHtml((ecg.source || "none").toUpperCase())}</span>`,
+            ];
+            if (ecg.sources && ecg.sources.cpu_percent !== null && ecg.sources.cpu_percent !== undefined) {
+                chips.push(`<span class="chip">CPU ${escapeHtml(String(ecg.sources.cpu_percent))}%</span>`);
+            }
+            const gpus = ecg.sources && Array.isArray(ecg.sources.gpus) ? ecg.sources.gpus : [];
+            if (gpus.length && gpus[0].memory_percent !== null && gpus[0].memory_percent !== undefined) {
+                chips.push(`<span class="chip">VRAM ${escapeHtml(String(gpus[0].memory_percent))}%</span>`);
+            }
+            ecgWindowEl.innerHTML = `
+                <div class="ecg-window-head">
+                    <div>
+                        <div class="ecg-window-title">ECG Window</div>
+                        <div class="ecg-window-value">${escapeHtml(String(percent))}%</div>
+                        <div class="ecg-window-copy"><strong>${escapeHtml(ecg.label || "Activity")}</strong></div>
+                    </div>
+                    <div class="chip-row">${chips.join("")}</div>
+                </div>
+                <svg class="ecg-trace" viewBox="0 0 360 96" preserveAspectRatio="none" aria-label="Hardware activity trace">
+                    <polyline points="${trace}" fill="none" stroke="#b64b33" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+                <div class="ecg-window-note">${escapeHtml(ecg.note || "This trace reflects local hardware activity for the builder.")}</div>
+                <div class="ecg-window-meta">
+                    <span class="chip">${ecg.available ? "Live" : "Waiting"}</span>
+                    <span class="chip">${ecg.supported ? "Telemetry present" : "Telemetry unavailable"}</span>
+                    <span class="chip">Updates every second</span>
+                </div>
+            `;
+        }
+
+        function describeLatestTag(entry, label) {
+            if (!entry || !entry.tags || !entry.tags.length) {
+                return `${label}: no checkpoint family yet.`;
+            }
+            const latest = entry.tags[0];
+            const stepText = latest.last_step !== undefined && latest.last_step !== null ? `step ${latest.last_step}` : "no saved step yet";
+            return `${label}: latest tag ${latest.tag} at ${stepText}.`;
+        }
+
+        function renderCheckpointStageNotes(builder) {
+            const sets = builder.checkpoint_sets || {};
+            const base = sets.base || { tags: [] };
+            const sft = sets.sft || { tags: [] };
+            const rl = sets.rl || { tags: [] };
+            const hardware = builder.hardware_recommendations || {};
+            const baseSaveEvery = hardware.baseTrainForm && hardware.baseTrainForm.save_every;
+            const sftSaveEvery = hardware.chatSftForm && hardware.chatSftForm.save_every;
+            const rlSaveEvery = hardware.chatRlForm && hardware.chatRlForm.save_every;
+
+            baseCheckpointInfoEl.innerHTML = [
+                `<div><strong>${escapeHtml(describeLatestTag(base, "Base checkpoints"))}</strong></div>`,
+                `<div>${base.tags.length ? "If you need to continue an interrupted base run, select that job in Job Queue and use Copy Resume To Form." : "Your first successful base run will create a reusable checkpoint family here."}</div>`,
+                `<div>${baseSaveEvery ? `Current hardware-fit starter save cadence: every ${escapeHtml(String(baseSaveEvery))} steps.` : "Set Save Every on long base runs so pause/resume has useful checkpoints."}</div>`,
+            ].join("");
+
+            sftCheckpointInfoEl.innerHTML = [
+                `<div><strong>${escapeHtml(describeLatestTag(sft, "SFT checkpoints"))}</strong></div>`,
+                `<div>${sft.tags.length ? "Use these for chat eval, chat loading, or continuing an interrupted SFT run." : "SFT checkpoints appear after your first supervised fine-tune run saves successfully."}</div>`,
+                `<div>${sftSaveEvery ? `Current hardware-fit starter save cadence: every ${escapeHtml(String(sftSaveEvery))} steps.` : "Keep Save Every enabled if you expect to pause and continue later."}</div>`,
+            ].join("");
+
+            rlCheckpointInfoEl.innerHTML = [
+                `<div><strong>${escapeHtml(describeLatestTag(rl, "RL checkpoints"))}</strong></div>`,
+                `<div>${rl.tags.length ? "Use the latest RL checkpoint for chat eval, loading, or continuing an interrupted RL run." : "RL checkpoints appear only after you already have an SFT model and run Chat RL."}</div>`,
+                `<div>${rlSaveEvery ? `Current hardware-fit starter save cadence: every ${escapeHtml(String(rlSaveEvery))} steps.` : "For long RL runs, keep Save Every active so a pause has somewhere to land."}</div>`,
+            ].join("");
+        }
+
+        function applyHardwareFit(options = {}) {
+            if (!state.bootstrap) return;
+            const recommendations = state.bootstrap.builder.hardware_recommendations || {};
+            applyRecommendedForms(recommendations);
+            if (!options.silent) {
+                const title = recommendations.summary && recommendations.summary.title ? recommendations.summary.title : "hardware fit";
+                showNotice(`Applied ${title} recommendations.`, "good");
+            }
         }
 
         function renderBenchmarks(benchmarks) {
@@ -1845,6 +2604,295 @@
                 <div style="margin-top: 8px;"><strong>Workers:</strong> ${chat.num_workers}</div>
                 ${chat.error ? `<div style="margin-top: 8px;"><strong>Load error:</strong> ${chat.error}</div>` : ""}
             `;
+        }
+
+        function getCockpitSettings() {
+            return {
+                profile: cockpitBackendProfileEl.value,
+                temperature: Number(cockpitTemperatureEl.value || 0.2),
+                topK: Number(cockpitTopKEl.value || 40),
+                maxTokens: Number(cockpitMaxTokensEl.value || 512),
+                assistantActions: cockpitAssistantActionsEl.value,
+                systemPrompt: cockpitSystemPromptEl.value.trim(),
+            };
+        }
+
+        function saveCockpitSettings() {
+            try {
+                window.localStorage.setItem(COCKPIT_STORAGE_KEY, JSON.stringify(getCockpitSettings()));
+            } catch (error) {
+                console.warn("Unable to persist cockpit settings", error);
+            }
+        }
+
+        function loadCockpitSettings() {
+            try {
+                const raw = window.localStorage.getItem(COCKPIT_STORAGE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (!saved || typeof saved !== "object") return;
+
+                if (typeof saved.profile === "string") cockpitBackendProfileEl.value = saved.profile;
+                if (saved.temperature !== undefined && saved.temperature !== null) cockpitTemperatureEl.value = String(saved.temperature);
+                if (saved.topK !== undefined && saved.topK !== null) cockpitTopKEl.value = String(saved.topK);
+                if (saved.maxTokens !== undefined && saved.maxTokens !== null) cockpitMaxTokensEl.value = String(saved.maxTokens);
+                if (typeof saved.assistantActions === "string") cockpitAssistantActionsEl.value = saved.assistantActions;
+                if (typeof saved.systemPrompt === "string") cockpitSystemPromptEl.value = saved.systemPrompt;
+            } catch (error) {
+                console.warn("Unable to load cockpit settings", error);
+            }
+        }
+
+        function clearCockpitSettings() {
+            try {
+                window.localStorage.removeItem(COCKPIT_STORAGE_KEY);
+            } catch (error) {
+                console.warn("Unable to clear cockpit settings", error);
+            }
+        }
+
+        function resetCockpitToDefaults() {
+            cockpitBackendProfileEl.value = "local_runtime";
+            cockpitTemperatureEl.value = "0.2";
+            cockpitTopKEl.value = "40";
+            cockpitMaxTokensEl.value = "512";
+            cockpitAssistantActionsEl.value = "1";
+            cockpitSystemPromptEl.value = "You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.";
+        }
+
+        function approximateTokenCount(text) {
+            if (!text) return 0;
+            return Math.max(1, Math.ceil(String(text).length / 4));
+        }
+
+        function basename(pathValue) {
+            if (!pathValue) return "";
+            const normalized = String(pathValue).replaceAll("\\", "/");
+            const parts = normalized.split("/");
+            return parts[parts.length - 1] || normalized;
+        }
+
+        function estimateSelectedWorkspaceTokens() {
+            let chars = 0;
+            if (state.selectedSandboxPath && sandboxEditorEl.value) {
+                chars += sandboxEditorEl.value.length;
+            }
+            if (state.selectedCorpusPath && corpusEditorEl.value) {
+                chars += corpusEditorEl.value.length;
+            }
+            return chars > 0 ? Math.max(1, Math.ceil(chars / 4)) : 0;
+        }
+
+        function resolveEffectiveCockpitProfile() {
+            const settings = getCockpitSettings();
+            const runtime = state.bootstrap && state.bootstrap.runtime ? state.bootstrap.runtime : null;
+            const chat = state.bootstrap && state.bootstrap.chat ? state.bootstrap.chat : null;
+            const runtimeConfig = runtime && runtime.running ? (runtime.config || {}) : cleanOptionalPayload(serializeForm("runtimeForm"));
+            const runtimeCtx = Number(runtimeConfig.ctx_size || 0) || 0;
+            const runtimeModel = runtime && runtime.config && runtime.config.model_path
+                ? basename(runtime.config.model_path)
+                : runtime && runtime.bundle && runtime.bundle.recommended_model
+                    ? basename(runtime.bundle.recommended_model.name)
+                    : "no GGUF selected";
+            const internalSource = chat && chat.config && chat.config.source ? chat.config.source : "unknown";
+
+            if (settings.profile === "local_runtime") {
+                return {
+                    provider: "local_runtime",
+                    backendLabel: "local runtime assistant",
+                    targetLabel: runtimeModel,
+                    ctxSize: runtimeCtx,
+                };
+            }
+            if (settings.profile === "internal_latest_sft") {
+                return {
+                    provider: "internal_nanochat",
+                    backendLabel: "internal chat",
+                    targetLabel: "latest SFT checkpoint",
+                    ctxSize: 0,
+                };
+            }
+            if (settings.profile === "internal_latest_rl") {
+                return {
+                    provider: "internal_nanochat",
+                    backendLabel: "internal chat",
+                    targetLabel: "latest RL checkpoint",
+                    ctxSize: 0,
+                };
+            }
+            return {
+                provider: "internal_nanochat",
+                backendLabel: "internal chat",
+                targetLabel: `current load (${internalSource})`,
+                ctxSize: 0,
+            };
+        }
+
+        function estimateLocalRuntimePressure(mode = "chat") {
+            const settings = getCockpitSettings();
+            const profile = resolveEffectiveCockpitProfile();
+            if (profile.provider !== "local_runtime") {
+                return null;
+            }
+
+            const systemTokens = approximateTokenCount(settings.systemPrompt);
+            const workspaceTokens = estimateSelectedWorkspaceTokens();
+            const overheadTokens = 220;
+            const requestedMaxTokens = Number(settings.maxTokens || 512);
+            const ctxSize = Number(profile.ctxSize || 0);
+
+            let draftTokens = 0;
+            let historyTokens = 0;
+            if (mode === "quick_prompt") {
+                draftTokens = approximateTokenCount(quickPromptInputEl.value.trim());
+            } else {
+                draftTokens = approximateTokenCount(chatInputEl.value.trim());
+                historyTokens = approximateTokenCount(
+                    state.chatMessages
+                        .filter((message) => message.role === "user" || message.role === "assistant")
+                        .map((message) => message.content || "")
+                        .join("\n")
+                );
+            }
+
+            const promptEstimate = systemTokens + workspaceTokens + overheadTokens + historyTokens + draftTokens;
+            const totalEstimate = promptEstimate + requestedMaxTokens;
+            const ratio = ctxSize > 0 ? totalEstimate / ctxSize : 0;
+            let severity = "ok";
+            if (ctxSize > 0 && ratio >= 1.0) severity = "danger";
+            else if (ctxSize > 0 && ratio >= 0.8) severity = "warn";
+
+            return {
+                mode,
+                ctxSize,
+                promptEstimate,
+                totalEstimate,
+                requestedMaxTokens,
+                ratio,
+                severity,
+            };
+        }
+
+        function maybeWarnContextPressure(mode = "chat") {
+            const estimate = estimateLocalRuntimePressure(mode);
+            if (!estimate) return;
+            if (estimate.severity === "danger") {
+                showNotice(`Context pressure warning: estimated request ${estimate.totalEstimate} tokens against ctx ${estimate.ctxSize}. Consider lowering max tokens, clearing history, or increasing ctx size.`, "bad");
+                return;
+            }
+            if (estimate.severity === "warn") {
+                showNotice(`Context pressure warning: estimated request ${estimate.totalEstimate} tokens is nearing ctx ${estimate.ctxSize}.`, "warn");
+            }
+        }
+
+        function updateLastTelemetry(telemetry) {
+            state.lastTelemetry = {
+                provider: telemetry.provider || "",
+                textSource: telemetry.textSource || "",
+                protocolWarning: telemetry.protocolWarning || "",
+                promptTokens: telemetry.promptTokens ?? null,
+                completionTokens: telemetry.completionTokens ?? null,
+                totalTokens: telemetry.totalTokens ?? null,
+                finishReason: telemetry.finishReason || "",
+            };
+            renderCockpitStatus();
+        }
+
+        function renderCockpitStatus() {
+            const settings = getCockpitSettings();
+            const profile = resolveEffectiveCockpitProfile();
+            const chatPressure = estimateLocalRuntimePressure("chat");
+            const quickPressure = estimateLocalRuntimePressure("quick_prompt");
+            const telemetry = state.lastTelemetry;
+            const chatPressureText = chatPressure && chatPressure.ctxSize
+                ? `${chatPressure.totalEstimate}/${chatPressure.ctxSize} est. tokens${chatPressure.severity === "danger" ? " (too high)" : chatPressure.severity === "warn" ? " (high)" : ""}`
+                : "n/a";
+            const quickPressureText = quickPressure && quickPressure.ctxSize
+                ? `${quickPressure.totalEstimate}/${quickPressure.ctxSize} est. tokens${quickPressure.severity === "danger" ? " (too high)" : quickPressure.severity === "warn" ? " (high)" : ""}`
+                : "n/a";
+            const telemetryText = telemetry
+                ? [
+                    telemetry.provider ? `provider ${telemetry.provider}` : "",
+                    telemetry.textSource ? `reply source ${telemetry.textSource}` : "",
+                    telemetry.promptTokens !== null ? `prompt ${telemetry.promptTokens}` : "",
+                    telemetry.completionTokens !== null ? `completion ${telemetry.completionTokens}` : "",
+                    telemetry.totalTokens !== null ? `total ${telemetry.totalTokens}` : "",
+                    telemetry.finishReason ? `finish ${telemetry.finishReason}` : "",
+                    telemetry.protocolWarning ? "protocol warning" : "",
+                ].filter(Boolean).join(" | ")
+                : "no completed turn yet";
+            cockpitStatusBoxEl.innerHTML = `
+                <div><strong>Profile:</strong> ${escapeHtml(settings.profile)}</div>
+                <div style="margin-top: 8px;"><strong>Effective backend:</strong> ${escapeHtml(profile.backendLabel)} | ${escapeHtml(profile.targetLabel)}${profile.ctxSize ? ` | ctx ${escapeHtml(String(profile.ctxSize))}` : ""}</div>
+                <div style="margin-top: 8px;"><strong>Sampling:</strong> temp ${escapeHtml(String(settings.temperature))} | top-k ${escapeHtml(String(settings.topK))} | max tokens ${escapeHtml(String(settings.maxTokens))}</div>
+                <div style="margin-top: 8px;"><strong>Bench routing:</strong> chat ${escapeHtml(chatProviderEl.value)} | quick prompt ${escapeHtml(quickPromptProviderEl.value)} | actions ${escapeHtml(assistantToolsEnabledEl.value === "1" ? "enabled" : "disabled")}</div>
+                <div style="margin-top: 8px;"><strong>Context estimate:</strong> chat ${escapeHtml(chatPressureText)} | quick prompt ${escapeHtml(quickPressureText)}</div>
+                <div style="margin-top: 8px;"><strong>Last turn:</strong> ${escapeHtml(telemetryText)}</div>
+            `;
+        }
+
+        function renderQuickPromptAuthorityNote() {
+            const providerLabel = quickPromptProviderEl.value === "local_runtime" ? "local runtime" : "internal nanochat";
+            quickPromptMetaEl.textContent = `Quick prompt output will appear here. Current one-shot defaults are synced from the cockpit: ${providerLabel} | temp ${quickPromptTemperatureEl.value || "0.2"} | top-k ${quickPromptTopKEl.value || "40"} | max tokens ${quickPromptMaxTokensEl.value || "512"}.`;
+        }
+
+        function applyCockpitSettings(options = {}) {
+            const settings = getCockpitSettings();
+            assistantToolsEnabledEl.value = settings.assistantActions;
+            runtimeSystemPromptEl.value = settings.systemPrompt;
+            quickPromptTemperatureEl.value = String(settings.temperature);
+            quickPromptTopKEl.value = String(settings.topK);
+            quickPromptMaxTokensEl.value = String(settings.maxTokens);
+
+            if (settings.profile === "local_runtime") {
+                chatProviderEl.value = "local_runtime";
+                quickPromptProviderEl.value = "local_runtime";
+            } else {
+                chatProviderEl.value = "internal_nanochat";
+                quickPromptProviderEl.value = "internal_nanochat";
+            }
+
+            renderCockpitStatus();
+            renderQuickPromptAuthorityNote();
+            saveCockpitSettings();
+            if (!options.silent) {
+                showNotice("Applied cockpit settings to the bench controls.", "good");
+            }
+        }
+
+        async function activateCockpitProfile() {
+            const settings = getCockpitSettings();
+            applyCockpitSettings({ silent: true });
+
+            if (settings.profile === "internal_latest_sft") {
+                await loadChatRuntime({ source: "sft", model_tag: "", step: "", num_gpus: 1 });
+                showNotice("Activated internal latest-SFT profile.", "good");
+                return;
+            }
+            if (settings.profile === "internal_latest_rl") {
+                await loadChatRuntime({ source: "rl", model_tag: "", step: "", num_gpus: 1 });
+                showNotice("Activated internal latest-RL profile.", "good");
+                return;
+            }
+            if (settings.profile === "internal_current") {
+                showNotice("Activated the current internal chat profile.", "good");
+                return;
+            }
+            showNotice("Activated the local runtime assistant profile.", "good");
+        }
+
+        function resetOperatorControls() {
+            clearCockpitSettings();
+            clearRuntimeFormSettings();
+            resetCockpitToDefaults();
+            if (state.bootstrap && state.bootstrap.builder && state.bootstrap.builder.hardware_recommendations) {
+                applyRecommendedForms(state.bootstrap.builder.hardware_recommendations);
+            }
+            applyCockpitSettings({ silent: true });
+            saveRuntimeFormSettings();
+            saveCockpitSettings();
+            renderCockpitStatus();
+            showNotice("Reset cockpit and runtime controls back to the hardware-fit defaults.", "good");
         }
 
         function renderRuntimeStatus(runtime) {
@@ -1909,6 +2957,7 @@
         function renderDesigns(designs) {
             if (!designs || !designs.length) return;
             designSelectRowEl.innerHTML = "";
+            designTrayEl.innerHTML = "";
 
             let activeDesign = designs[0];
             if (state.selectedDesignSlug) {
@@ -1918,21 +2967,60 @@
                 state.selectedDesignSlug = activeDesign.slug;
             }
 
+            const applyDesignSelection = (design) => {
+                state.selectedDesignSlug = design.slug;
+                populateDesignForm(design);
+                applyRecommendedForms(design.recipes || {});
+                state.lastAppliedDesignSlug = design.slug;
+                renderDesigns(state.bootstrap.builder.designs);
+            };
+
             designs.forEach((design) => {
                 const chip = document.createElement("button");
                 chip.type = "button";
                 chip.className = `chip ${design.slug === activeDesign.slug ? "good" : ""}`;
                 chip.textContent = design.name;
-                chip.addEventListener("click", () => {
-                    state.selectedDesignSlug = design.slug;
-                    populateDesignForm(design);
-                    renderDesigns(state.bootstrap.builder.designs);
-                });
+                chip.addEventListener("click", () => applyDesignSelection(design));
                 designSelectRowEl.appendChild(chip);
+
+                const card = document.createElement("div");
+                card.className = `design-card ${design.slug === activeDesign.slug ? "active" : ""}`;
+                const sourceChip = design.draft_source === "local_gguf"
+                    ? `<span class="chip good">GGUF draft</span>`
+                    : `<span class="chip">manual</span>`;
+                const goalBlock = design.draft_goal
+                    ? `<p><strong>Goal:</strong> ${escapeHtml(design.draft_goal)}</p>`
+                    : "";
+                card.innerHTML = `
+                    <div class="job-title">
+                        <h3>${escapeHtml(design.name || design.slug)}</h3>
+                        ${sourceChip}
+                    </div>
+                    <p>${escapeHtml(design.mission || "No mission set.")}</p>
+                    ${goalBlock}
+                    <div class="design-actions">
+                        <button class="btn secondary" type="button" data-action="select">Use This</button>
+                        <button class="btn signal" type="button" data-action="publish">Publish</button>
+                        <button class="btn ghost" type="button" data-action="delete">Delete</button>
+                    </div>
+                `;
+                card.querySelector('[data-action="select"]').addEventListener("click", () => applyDesignSelection(design));
+                card.querySelector('[data-action="publish"]').addEventListener("click", async () => {
+                    applyDesignSelection(design);
+                    await publishDesignAction();
+                });
+                card.querySelector('[data-action="delete"]').addEventListener("click", async () => {
+                    await deleteDesignAction(design.slug, design.name || design.slug);
+                });
+                designTrayEl.appendChild(card);
             });
 
-            if (state.forceDesignPopulate || !state.designDirty) {
+            if (state.forceDesignPopulate || state.lastAppliedDesignSlug !== activeDesign.slug || !state.designDirty) {
                 populateDesignForm(activeDesign);
+                if (state.forceDesignPopulate || state.lastAppliedDesignSlug !== activeDesign.slug) {
+                    applyRecommendedForms(activeDesign.recipes || {});
+                    state.lastAppliedDesignSlug = activeDesign.slug;
+                }
                 state.forceDesignPopulate = false;
             }
         }
@@ -1959,7 +3047,7 @@
                     </div>
                     <div class="job-meta">
                         <div>${job.job_type}</div>
-                        <div>${formatTimestamp(job.created_at)}</div>
+                        <div>${job.checkpoint_tag ? `${job.checkpoint_tag}${job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null ? ` | step ${job.latest_checkpoint_step}` : ""}` : formatTimestamp(job.created_at)}</div>
                     </div>
                 `;
                 card.addEventListener("click", () => {
@@ -1981,6 +3069,10 @@
                 jobSummaryEl.textContent = "Select a job to inspect its command and logs.";
                 jobCommandPreviewEl.textContent = "No job selected.";
                 jobLogsEl.value = "";
+                pauseJobBtnEl.disabled = true;
+                resumeJobBtnEl.disabled = true;
+                copyResumeBtnEl.disabled = true;
+                useCheckpointBtnEl.disabled = true;
                 return;
             }
             const summary = [
@@ -1998,10 +3090,165 @@
                 if (job.metrics.avg_bytes_per_token !== undefined) metricParts.push(`avg bytes/token ${Number(job.metrics.avg_bytes_per_token).toFixed(2)}`);
                 if (job.metrics.oom_detected) metricParts.push("OOM detected");
             }
-            jobSummaryEl.textContent = metricParts.length ? `${summary} | ${metricParts.join(" | ")}` : summary;
+            const friendlyFailure = classifyJobFailure(job);
+            const summaryLines = [escapeHtml(summary)];
+            if (metricParts.length) {
+                summaryLines.push(escapeHtml(metricParts.join(" | ")));
+            }
+            if (job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null) {
+                summaryLines.push(`Latest saved checkpoint step: ${escapeHtml(String(job.latest_checkpoint_step))}`);
+            }
+            if (job.requested_resume_step !== undefined && job.requested_resume_step !== null) {
+                summaryLines.push(`This run was launched from resume step: ${escapeHtml(String(job.requested_resume_step))}`);
+            }
+            if (job.save_every !== undefined && job.save_every !== null) {
+                summaryLines.push(`Checkpoint save cadence: every ${escapeHtml(String(job.save_every))} step(s)`);
+            }
+            if (job.checkpoint_tag) {
+                summaryLines.push(`Checkpoint tag: ${escapeHtml(job.checkpoint_tag)}`);
+            }
+            if (job.checkpoint_dir) {
+                summaryLines.push(`Checkpoint directory: ${escapeHtml(job.checkpoint_dir)}`);
+            }
+            if (job.can_resume) {
+                const stepText = job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null
+                    ? ` step ${escapeHtml(String(job.latest_checkpoint_step))}`
+                    : " the latest saved checkpoint";
+                summaryLines.push(`<strong>Resume ready:</strong> Resume will relaunch this run from${stepText}, or you can copy the same values back into the stage form.`);
+            } else if (["base_train", "chat_sft", "chat_rl"].includes(job.job_type) && !job.latest_checkpoint_step) {
+                summaryLines.push("<strong>Resume note:</strong> No saved checkpoint is visible yet. If you want resumability, keep Save Every enabled and let the run reach its next checkpoint.");
+            } else if (["base_train", "chat_sft", "chat_rl"].includes(job.job_type) && job.status === "running" && job.save_every) {
+                summaryLines.push(`<strong>Pause note:</strong> A pause will stop at a safe point. The next checkpoint should land within about ${escapeHtml(String(job.save_every))} step(s).`);
+            }
+            if (friendlyFailure) {
+                summaryLines.push(`<strong>Likely issue:</strong> ${escapeHtml(friendlyFailure.title)}`);
+                summaryLines.push(`<strong>Why it failed:</strong> ${escapeHtml(friendlyFailure.detail)}`);
+                summaryLines.push(`<strong>Suggested next step:</strong> ${escapeHtml(friendlyFailure.nextStep)}`);
+            }
+            jobSummaryEl.innerHTML = summaryLines.map((line) => `<div>${line}</div>`).join("");
             jobCommandPreviewEl.textContent = job.display_command || "No command recorded.";
             jobLogsEl.value = (job.logs || []).join("\n");
             jobLogsEl.scrollTop = jobLogsEl.scrollHeight;
+            pauseJobBtnEl.disabled = !job.can_pause;
+            resumeJobBtnEl.disabled = !job.can_resume;
+            copyResumeBtnEl.disabled = !["base_train", "chat_sft", "chat_rl"].includes(job.job_type) || !job.latest_checkpoint_step;
+            useCheckpointBtnEl.disabled = !["base_train", "chat_sft", "chat_rl"].includes(job.job_type) || !job.latest_checkpoint_step;
+        }
+
+        function applySelectedJobToForms(mode = "resume") {
+            const job = state.selectedJob;
+            if (!job || !job.latest_checkpoint_step) {
+                showNotice("The selected job does not have a saved checkpoint step yet.", "bad");
+                return false;
+            }
+            const tag = job.checkpoint_tag || "";
+            const step = job.latest_checkpoint_step;
+
+            if (mode === "resume") {
+                if (job.job_type === "base_train") {
+                    document.getElementById("baseResumeFromStep").value = step;
+                    document.getElementById("baseTag").value = tag;
+                } else if (job.job_type === "chat_sft") {
+                    document.getElementById("sftResumeFromStep").value = step;
+                    document.getElementById("sftModelTag").value = tag;
+                    document.getElementById("sftModelStep").value = "";
+                } else if (job.job_type === "chat_rl") {
+                    document.getElementById("rlResumeFromStep").value = step;
+                    document.getElementById("rlModelTag").value = tag;
+                    document.getElementById("rlModelStep").value = "";
+                } else {
+                    return false;
+                }
+                return true;
+            }
+
+            if (job.job_type === "base_train") {
+                document.getElementById("baseEvalTag").value = tag;
+                document.getElementById("baseEvalStep").value = step;
+                return true;
+            }
+            if (job.job_type === "chat_sft" || job.job_type === "chat_rl") {
+                const source = job.job_type === "chat_rl" ? "rl" : "sft";
+                document.getElementById("chatEvalSource").value = source;
+                document.getElementById("chatEvalModelTag").value = tag;
+                document.getElementById("chatEvalStep").value = step;
+                document.getElementById("chatLoadSource").value = source;
+                document.getElementById("chatLoadTag").value = tag;
+                document.getElementById("chatLoadStep").value = step;
+                return true;
+            }
+            return false;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll("\"", "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function classifyJobFailure(job) {
+            if (!job || job.status !== "failed") return null;
+            const combined = `${job.display_command || ""}\n${(job.logs || []).join("\n")}`.toLowerCase();
+            const has = (pattern) => pattern.test(combined);
+            const jobType = job.job_type || "";
+
+            if (has(/parquet support requires pyarrow|no module named 'pyarrow'|modulenotfounderror: no module named 'pyarrow'/)) {
+                return {
+                    title: "Parquet support is not installed yet",
+                    detail: "This run tried to read a parquet corpus file, but the local Python environment does not have pyarrow.",
+                    nextStep: "Install pyarrow locally, then retry. If you want a quick workaround, use .txt or .jsonl corpus files instead.",
+                };
+            }
+            if (has(/tokenizer[\\/]+tokenizer\.pkl|tokenizer[\\/]+tokenizer\.json|return rustbpetokenizer\.from_directory|get_tokenizer\(\)/)) {
+                return {
+                    title: "Tokenizer files are missing",
+                    detail: "Base training or evaluation started before a tokenizer had been created in the nanochat cache.",
+                    nextStep: "Run Stage 1 Train Tokenizer first, confirm the tokenizer shows as ready, then launch this job again.",
+                };
+            }
+            if (has(/no local documents found for split|populate the local corpus first/)) {
+                return {
+                    title: "The local corpus is empty for this split",
+                    detail: "The training script did not find usable documents under the local corpus path it expected.",
+                    nextStep: "Add files under local_corpus, especially the train split, then retry. Text, JSONL, code files, and parquet are all supported.",
+                };
+            }
+            if (has(/identity_conversations\.jsonl|published identity file|identity file/)) {
+                return {
+                    title: "The active identity file is missing",
+                    detail: "Chat SFT expected a published identity dataset, but it was not available when the run started.",
+                    nextStep: "Open Assistant Studio, publish the identity file, and then rerun Chat SFT.",
+                };
+            }
+            if (has(/chatsft_checkpoints|no checkpoints found in .*chatsft_checkpoints|cannot find the path specified: '.*chatsft_checkpoints/)) {
+                return {
+                    title: "A chat SFT checkpoint is missing",
+                    detail: "This stage needs an existing supervised fine-tuning checkpoint before it can continue.",
+                    nextStep: "Run Stage 3 Chat SFT first, then use Load Latest SFT or pick a valid SFT model tag before retrying Chat RL or Chat Eval.",
+                };
+            }
+            if (jobType === "chat_rl" && has(/base_checkpoints|no checkpoints found in .*base/)) {
+                return {
+                    title: "The required base checkpoint was not found",
+                    detail: "Chat RL could not find the base model family it expected to build from.",
+                    nextStep: "Run Stage 2 Base Model Training first, then complete Chat SFT before coming back to Chat RL.",
+                };
+            }
+            if (has(/out of memory|cuda out of memory|oom detected/)) {
+                return {
+                    title: "The run ran out of memory",
+                    detail: "The current batch size or model shape is too large for the selected device.",
+                    nextStep: "Reduce Device Batch Size first. If needed, reduce sequence length, total batch size, or model depth and try again.",
+                };
+            }
+            return {
+                title: "The run stopped with an unclassified error",
+                detail: "The raw logs below still contain the exact traceback or command output.",
+                nextStep: "Read the final log lines, then use the assistant or process log to decide the next fix before rerunning.",
+            };
         }
 
         function renderActivity(activity) {
@@ -2065,15 +3312,55 @@
                 card.innerHTML = `
                     <div class="job-title">
                         <span>${file.path}</span>
-                        <span class="chip">${file.size} B</span>
+                        <span class="chip">${file.kind || "text"}</span>
                     </div>
                     <div class="job-meta">
                         <div>${new Date(file.updated_at * 1000).toLocaleString()}</div>
+                        <div>${file.kind === "parquet" ? `${file.row_count || 0} rows` : `${file.size} B`}</div>
                     </div>
                 `;
                 card.addEventListener("click", () => loadCorpusFile(file.path));
                 corpusFilesEl.appendChild(card);
             });
+        }
+
+        function setCorpusEditorMode(mode, file = null) {
+            state.corpusEditorMode = mode;
+            corpusEditorEl.readOnly = mode === "parquet-preview";
+            if (mode === "parquet-preview") {
+                corpusEditorEl.placeholder = "Parquet files are previewed here as sample rows. Create a new .parquet path to save JSON object records.";
+            } else if ((corpusPathEl.value || "").trim().toLowerCase().endsWith(".parquet")) {
+                corpusEditorEl.placeholder = "For .parquet files, paste a JSON array of objects or JSONL object rows here, then save.";
+            } else {
+                corpusEditorEl.placeholder = "Draft local text, JSON, JSONL, or a JSON array of records for a new .parquet file here.";
+            }
+        }
+
+        function formatParquetSchema(schemaText) {
+            return (schemaText || "").split("\n").map((line) => line.trim()).filter(Boolean).join(" | ");
+        }
+
+        function parseCorpusParquetRecords(rawText) {
+            const trimmed = (rawText || "").trim();
+            if (!trimmed) {
+                throw new Error("Enter a JSON array of objects or JSONL object rows for the parquet file.");
+            }
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed) && parsed.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+                    return parsed;
+                }
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return [parsed];
+                }
+            } catch (error) {
+                // Fall back to JSONL parsing below.
+            }
+            const rows = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => JSON.parse(line));
+            if (!rows.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+                throw new Error("Each parquet row must be a JSON object.");
+            }
+            return rows;
         }
 
         async function loadSandboxFile(path = null) {
@@ -2145,8 +3432,16 @@
             const file = await api(`/api/corpus/file?path=${encodeURIComponent(targetPath)}`);
             state.selectedCorpusPath = file.path;
             corpusPathEl.value = file.path;
-            corpusEditorEl.value = file.content || "";
-            corpusMetaEl.textContent = `Loaded ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            if (file.kind === "parquet") {
+                setCorpusEditorMode("parquet-preview", file);
+                corpusEditorEl.value = JSON.stringify(file.sample_rows || [], null, 2);
+                const schemaSummary = formatParquetSchema(file.schema);
+                corpusMetaEl.textContent = `Loaded ${file.path} | parquet | ${file.row_count || 0} rows | ${file.column_count || 0} columns | ${new Date(file.updated_at * 1000).toLocaleString()}${schemaSummary ? ` | ${schemaSummary}` : ""}`;
+            } else {
+                setCorpusEditorMode("text", file);
+                corpusEditorEl.value = file.content || "";
+                corpusMetaEl.textContent = `Loaded ${file.path} | ${file.kind || "text"} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            }
             renderCorpus(state.bootstrap ? state.bootstrap.corpus : { files: [] });
         }
 
@@ -2156,16 +3451,41 @@
                 showNotice("Enter a corpus path first.", "bad");
                 return;
             }
+            if (state.corpusEditorMode === "parquet-preview") {
+                showNotice("Loaded parquet files are preview-only in this editor. Create a new .parquet path to save structured records.", "bad");
+                return;
+            }
+            const isParquetTarget = targetPath.toLowerCase().endsWith(".parquet");
+            let body;
+            try {
+                body = isParquetTarget
+                    ? {
+                        path: targetPath,
+                        records: parseCorpusParquetRecords(corpusEditorEl.value),
+                        mode: "overwrite",
+                    }
+                    : {
+                        path: targetPath,
+                        content: corpusEditorEl.value,
+                    };
+            } catch (error) {
+                showNotice(error.message || "Could not parse parquet records.", "bad");
+                return;
+            }
             const file = await api("/api/corpus/write", {
                 method: "POST",
-                body: {
-                    path: targetPath,
-                    content: corpusEditorEl.value,
-                },
+                body,
             });
             state.selectedCorpusPath = file.path;
             corpusPathEl.value = file.path;
-            corpusMetaEl.textContent = `Saved ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            if (file.kind === "parquet") {
+                setCorpusEditorMode("parquet-preview", file);
+                corpusEditorEl.value = JSON.stringify(file.sample_rows || [], null, 2);
+                corpusMetaEl.textContent = `Saved ${file.path} | parquet | ${file.row_count || 0} rows | ${file.column_count || 0} columns | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            } else {
+                setCorpusEditorMode("text", file);
+                corpusMetaEl.textContent = `Saved ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            }
             showNotice(`Saved corpus file ${file.path}.`, "good");
             await refreshBootstrap();
         }
@@ -2183,6 +3503,7 @@
             state.selectedCorpusPath = "";
             corpusPathEl.value = "";
             corpusEditorEl.value = "";
+            setCorpusEditorMode("text");
             corpusMetaEl.textContent = "Corpus file deleted.";
             showNotice(`Deleted corpus file ${targetPath}.`);
             await refreshBootstrap();
@@ -2192,7 +3513,8 @@
             state.selectedCorpusPath = "";
             corpusPathEl.value = "";
             corpusEditorEl.value = "";
-            corpusMetaEl.textContent = "New corpus file. Enter a relative path such as train/reference.txt, then save.";
+            setCorpusEditorMode("text");
+            corpusMetaEl.textContent = "New corpus file. Use .txt/.json/.jsonl for text content or .parquet for JSON object records.";
             renderCorpus(state.bootstrap ? state.bootstrap.corpus : { files: [] });
         }
 
@@ -2207,13 +3529,26 @@
                 showNotice("Enter a target corpus path first.", "bad");
                 return;
             }
-            const result = await api("/api/corpus/copy-from-sandbox", {
-                method: "POST",
-                body: {
-                    source_path: sourcePath,
-                    target_path: targetPath,
-                },
-            });
+            let result;
+            try {
+                result = await api("/api/corpus/copy-from-sandbox", {
+                    method: "POST",
+                    body: {
+                        source_path: sourcePath,
+                        target_path: targetPath,
+                    },
+                });
+            } catch (error) {
+                if (
+                    targetPath.toLowerCase().endsWith(".parquet") &&
+                    error.message &&
+                    error.message.includes("Parquet corpus JSONL content")
+                ) {
+                    showNotice("That is not a dashboard bug: parquet corpus targets need JSON object rows. Use a JSON array of objects or JSONL with one object per line.", "bad");
+                    return;
+                }
+                throw error;
+            }
             state.selectedCorpusPath = result.target_path;
             corpusPathEl.value = result.target_path;
             showNotice(`Copied ${result.source_path} into corpus file ${result.target_path}.`, "good");
@@ -2268,6 +3603,62 @@
                     .filter(Boolean),
                 custom_notes: document.getElementById("designNotes").value.trim(),
             };
+        }
+
+        function splitFileList(rawValue) {
+            return String(rawValue || "")
+                .split(/[;\n|]+/)
+                .map((piece) => piece.trim())
+                .filter(Boolean);
+        }
+
+        function normalizeRelativePath(path) {
+            return String(path || "").replaceAll("\\", "/").replace(/^\/+/, "");
+        }
+
+        function collectStageCompatibilityWarnings(jobType, params) {
+            if (!state.bootstrap || !state.bootstrap.builder) return [];
+            const warnings = [];
+            const builder = state.bootstrap.builder;
+            const corpusSummary = builder.corpus_summary || {};
+            const trainSplit = corpusSummary.splits && corpusSummary.splits.train ? corpusSummary.splits.train : {};
+            const trainCount = Number(trainSplit.file_count || 0);
+            const sandboxFiles = new Set(((state.bootstrap.sandbox && state.bootstrap.sandbox.files) || []).map((file) => normalizeRelativePath(file.path)));
+            const corpusFiles = new Set(((state.bootstrap.corpus && state.bootstrap.corpus.files) || []).map((file) => normalizeRelativePath(file.path)));
+
+            if (["tokenizer_train", "base_train", "base_eval", "benchmark_eval"].includes(jobType) && trainCount === 0) {
+                warnings.push("local_corpus/train does not have any files yet, so tokenizer or base-model stages are likely to fail.");
+            }
+
+            if (jobType === "chat_sft") {
+                const trainFiles = splitFileList(params.train_files);
+                const valFiles = splitFileList(params.val_files);
+                if (!trainFiles.length) {
+                    warnings.push("Chat SFT usually needs at least one training JSONL file with conversation rows.");
+                }
+                const allFiles = [...trainFiles, ...valFiles];
+                allFiles.forEach((filePath) => {
+                    const normalized = normalizeRelativePath(filePath);
+                    const lower = normalized.toLowerCase();
+                    if (lower.endsWith(".parquet")) {
+                        warnings.push(`${filePath} is a parquet corpus path, but Chat SFT expects conversation JSONL files instead.`);
+                        return;
+                    }
+                    if (!(lower.endsWith(".jsonl") || lower.endsWith(".json"))) {
+                        warnings.push(`${filePath} does not look like a chat dataset file. Chat SFT usually expects .jsonl conversation data.`);
+                    }
+                    if (corpusFiles.has(normalized) || lower.startsWith("train/") || lower.startsWith("val/")) {
+                        warnings.push(`${filePath} looks like a local_corpus path. Chat SFT reads conversation files from assistant_sandbox or absolute paths, not base-train corpus files.`);
+                    }
+                    const isAbsoluteWindows = /^[a-zA-Z]:[\\/]/.test(filePath);
+                    const isAbsoluteUnix = normalized.startsWith("/");
+                    if (!isAbsoluteWindows && !isAbsoluteUnix && !sandboxFiles.has(normalized) && !corpusFiles.has(normalized)) {
+                        warnings.push(`${filePath} is not currently present in assistant_sandbox, so Chat SFT may fail unless that relative file is created before launch.`);
+                    }
+                });
+            }
+
+            return [...new Set(warnings)];
         }
 
         function updateChattyCogBridgeStatus(buildPayload) {
@@ -2340,7 +3731,9 @@
                             ? "Run a small base training job."
                             : !builder.checkpoint_sets.sft.tags.length
                                 ? "Draft or review chat JSONL data, then run chat SFT."
-                                : "Test the current checkpoint in Conversation Lab and review logs.",
+                                : !builder.checkpoint_sets.rl.tags.length
+                                    ? "Run chat eval on the current SFT checkpoint, then decide whether to try chat RL."
+                                    : "Compare the latest SFT and RL checkpoints in chat eval and Conversation Lab.",
                 "",
                 "## Key artifacts",
                 "- builder_logs/activity.jsonl",
@@ -2428,11 +3821,19 @@
 
             renderChatStatus(chat);
             renderRuntimeStatus(state.bootstrap.runtime);
+            renderEcgWindow(state.bootstrap.ecg || state.ecg);
+            if (!state.runtimeDefaultsApplied && !(state.bootstrap.runtime && state.bootstrap.runtime.running)) {
+                applyRecommendedForms(builder.hardware_recommendations || {});
+                state.runtimeDefaultsApplied = true;
+            }
+            renderCockpitStatus();
             renderSandbox(sandbox);
             renderCorpus(corpus);
             renderBenchmarks(benchmarks);
             renderActivity(activity);
             renderPresets(builder.guided_presets);
+            renderHardwareSummary(builder);
+            renderCheckpointStageNotes(builder);
             renderDesigns(builder.designs);
             renderJobs(state.bootstrap.jobs);
             updateChattyCogBridgeStatus(buildChattyCogBridgePayload);
@@ -2440,6 +3841,9 @@
 
         async function refreshBootstrap() {
             state.bootstrap = await api("/api/dashboard/bootstrap");
+            if (state.bootstrap && state.bootstrap.ecg) {
+                state.ecg = state.bootstrap.ecg;
+            }
             renderBootstrap();
             if (state.selectedJobId) {
                 try {
@@ -2448,6 +3852,12 @@
                     console.warn(error);
                 }
             }
+        }
+
+        async function refreshEcg() {
+            const payload = await api("/api/dashboard/ecg");
+            state.ecg = payload;
+            renderEcgWindow(payload);
         }
 
         async function refreshSelectedJob() {
@@ -2462,7 +3872,10 @@
         async function saveDesign() {
             const design = await api("/api/dashboard/designs", {
                 method: "POST",
-                body: currentDesignPayload(),
+                body: {
+                    ...currentDesignPayload(),
+                    recipes: currentFormsSnapshot(),
+                },
             });
             state.selectedDesignSlug = design.design.slug;
             state.forceDesignPopulate = true;
@@ -2472,7 +3885,10 @@
         }
 
         async function publishDesignAction() {
-            const payload = currentDesignPayload();
+            const payload = {
+                ...currentDesignPayload(),
+                recipes: currentFormsSnapshot(),
+            };
             const saved = await api("/api/dashboard/designs", { method: "POST", body: payload });
             state.selectedDesignSlug = saved.design.slug;
             state.forceDesignPopulate = true;
@@ -2481,9 +3897,51 @@
             await refreshBootstrap();
         }
 
+        async function draftDesignWithRuntime() {
+            const goal = document.getElementById("designGoalPrompt").value.trim();
+            if (!goal) {
+                showNotice("Describe the assistant you want first.", "bad");
+                return;
+            }
+            const response = await api("/api/dashboard/designs/draft", {
+                method: "POST",
+                body: { goal },
+            });
+            state.selectedDesignSlug = response.design.slug;
+            state.forceDesignPopulate = true;
+            showNotice(`Drafted blueprint ${response.design.name}. Review it before publishing.`, "good");
+            await refreshBootstrap();
+        }
+
+        async function deleteDesignAction(slug, label) {
+            await api(`/api/dashboard/designs/${encodeURIComponent(slug)}`, { method: "DELETE" });
+            if (state.selectedDesignSlug === slug) {
+                state.selectedDesignSlug = null;
+                state.forceDesignPopulate = true;
+            }
+            showNotice(`Deleted design ${label}.`, "good");
+            await refreshBootstrap();
+        }
+
+        function getJobParams(jobType, formId = null) {
+            if (jobType === "base_train") {
+                return {
+                    ...serializeForm("baseTrainForm"),
+                    ...serializeForm("baseTrainAdvancedForm"),
+                };
+            }
+            if (jobType === "chat_sft") {
+                return {
+                    ...serializeForm("chatSftForm"),
+                    ...serializeForm("chatSftAdvancedForm"),
+                };
+            }
+            return formId ? serializeForm(formId) : {};
+        }
+
         async function launchJob(jobType, formId = null) {
-            let params = {};
-            if (formId) params = serializeForm(formId);
+            const params = getJobParams(jobType, formId);
+            const compatibilityWarnings = collectStageCompatibilityWarnings(jobType, params);
             const label = jobType.replaceAll("_", " ");
             const response = await api("/api/dashboard/jobs", {
                 method: "POST",
@@ -2494,7 +3952,13 @@
                 },
             });
             state.selectedJobId = response.job.id;
-            showNotice(`Launched ${jobType}.`);
+            if (compatibilityWarnings.length) {
+                const hint = compatibilityWarnings.slice(0, 2).join(" ");
+                const suffix = compatibilityWarnings.length > 2 ? " Review the stage inputs if this was not intentional." : "";
+                showNotice(`Launched ${jobType}. Heads up: ${hint}${suffix}`, "warn");
+            } else {
+                showNotice(`Launched ${jobType}.`);
+            }
             await refreshBootstrap();
             await refreshSelectedJob();
         }
@@ -2523,6 +3987,7 @@
                 device_type: "cpu",
             });
             fillForm("chatLoadForm", { source: "sft", num_gpus: 1 });
+            applyHardwareFit({ silent: true });
             renderPresets(state.bootstrap.builder.guided_presets);
             showNotice(`Applied preset: ${preset.label}`);
         }
@@ -2535,6 +4000,49 @@
             await refreshSelectedJob();
         }
 
+        async function pauseSelectedJob() {
+            if (!state.selectedJobId) return;
+            await api(`/api/dashboard/jobs/${state.selectedJobId}/pause`, { method: "POST" });
+            const job = state.selectedJob;
+            if (job && job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null) {
+                showNotice(`Pause requested. The run will stop and stay resumable from at least step ${job.latest_checkpoint_step}.`, "good");
+            } else {
+                showNotice("Pause requested. The run will stop at a safe point and become resumable after it reaches a saved checkpoint.", "good");
+            }
+            await refreshBootstrap();
+            await refreshSelectedJob();
+        }
+
+        async function resumeSelectedJob() {
+            if (!state.selectedJobId) return;
+            const response = await api(`/api/dashboard/jobs/${state.selectedJobId}/resume`, { method: "POST" });
+            state.selectedJobId = response.job.id;
+            const step = response.job && response.job.requested_resume_step !== undefined && response.job.requested_resume_step !== null
+                ? response.job.requested_resume_step
+                : null;
+            showNotice(step !== null ? `Resume launched from checkpoint step ${step}.` : "Resume launched from the latest saved checkpoint.", "good");
+            await refreshBootstrap();
+            await refreshSelectedJob();
+        }
+
+        function copyResumeFromSelectedJob() {
+            if (applySelectedJobToForms("resume")) {
+                const job = state.selectedJob;
+                const step = job && job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null ? job.latest_checkpoint_step : "the latest saved checkpoint";
+                showNotice(`Copied resume settings from ${job && job.checkpoint_tag ? job.checkpoint_tag : "the selected run"} at step ${step}.`, "good");
+                return;
+            }
+            showNotice("This selected job does not map to a resume-capable stage form.", "bad");
+        }
+
+        function useSelectedCheckpointInEvalOrLoad() {
+            if (applySelectedJobToForms("eval")) {
+                showNotice("Copied the selected checkpoint into the relevant eval/load form.", "good");
+                return;
+            }
+            showNotice("This selected job does not map to an eval/load checkpoint target.", "bad");
+        }
+
         async function loadChatRuntime(overrides = null) {
             const payload = cleanOptionalPayload(overrides || serializeForm("chatLoadForm"));
             const status = await api("/api/dashboard/chat/load", {
@@ -2542,18 +4050,21 @@
                 body: payload,
             });
             renderChatStatus(status);
+            quickPromptProviderEl.value = "internal_nanochat";
             showNotice(status.ready ? "Chat model loaded." : "Chat load attempted. Check runtime status for details.", status.ready ? "good" : "bad");
             await refreshBootstrap();
         }
 
         async function startLocalRuntime() {
             const payload = cleanOptionalPayload(serializeForm("runtimeForm"));
+            saveRuntimeFormSettings();
             const status = await api("/api/runtime/start", {
                 method: "POST",
                 body: payload,
             });
             renderRuntimeStatus(status);
             chatProviderEl.value = "local_runtime";
+            quickPromptProviderEl.value = "local_runtime";
             showNotice(status.ready ? "Local runtime is ready." : "Local runtime start requested.", status.ready ? "good" : "bad");
             await refreshBootstrap();
         }
@@ -2586,6 +4097,7 @@
             if (state.isSendingChat) return;
             const prompt = chatInputEl.value.trim();
             if (!prompt) return;
+            maybeWarnContextPressure("chat");
             state.isSendingChat = true;
             appendMessage("user", prompt);
             chatInputEl.value = "";
@@ -2608,15 +4120,24 @@
                         method: "POST",
                         body: {
                             messages: messageHistory,
-                            temperature: 0.2,
-                            max_tokens: 512,
-                            system_prompt: runtimeSystemPromptEl.value.trim(),
+                            temperature: Number(cockpitTemperatureEl.value || 0.2),
+                            max_tokens: Number(cockpitMaxTokensEl.value || 512),
+                            system_prompt: cockpitSystemPromptEl.value.trim(),
                             sandbox_paths: sandboxPaths,
                             corpus_paths: corpusPaths,
                             max_actions: 3,
                         },
                     });
                     assistantMessage.content = response.text || "[empty response]";
+                    updateLastTelemetry({
+                        provider,
+                        textSource: response.text_source || "",
+                        protocolWarning: response.protocol_warning || "",
+                        promptTokens: response.raw && response.raw.usage ? response.raw.usage.prompt_tokens : null,
+                        completionTokens: response.raw && response.raw.usage ? response.raw.usage.completion_tokens : null,
+                        totalTokens: response.raw && response.raw.usage ? response.raw.usage.total_tokens : null,
+                        finishReason: response.raw && response.raw.choices && response.raw.choices[0] ? response.raw.choices[0].finish_reason || "" : "",
+                    });
                     if (response.actions && response.actions.length) {
                         assistantMessage.content += `\n\n[local actions]\n${summarizeActions(response.actions)}`;
                         const autotuneAction = response.actions.find((action) => action.tool === "autotune_settings" && action.status === "ok");
@@ -2636,9 +4157,9 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             messages: messageHistory,
-                            temperature: 0.2,
-                            max_tokens: 256,
-                            top_k: 40,
+                            temperature: Number(cockpitTemperatureEl.value || 0.2),
+                            max_tokens: Number(cockpitMaxTokensEl.value || 512),
+                            top_k: Number(cockpitTopKEl.value || 40),
                         }),
                     });
 
@@ -2674,6 +4195,15 @@
                             }
                         }
                     }
+                    updateLastTelemetry({
+                        provider,
+                        textSource: "stream",
+                        protocolWarning: "",
+                        promptTokens: null,
+                        completionTokens: null,
+                        totalTokens: null,
+                        finishReason: "stream_done",
+                    });
                 }
             } catch (error) {
                 assistantMessage.content = `[chat error] ${error.message}`;
@@ -2694,6 +4224,144 @@
             return actions.map((action) => `${action.tool} [${action.status}]`).join(", ");
         }
 
+        async function requestSingleTurnResponse(provider, prompt, options = {}) {
+            if (provider === "local_runtime") {
+                const response = await api("/api/runtime/chat", {
+                    method: "POST",
+                    body: {
+                        messages: [{ role: "user", content: prompt }],
+                        temperature: options.temperature ?? 0.6,
+                        max_tokens: options.maxTokens ?? 256,
+                        system_prompt: "",
+                        sandbox_paths: [],
+                        corpus_paths: [],
+                    },
+                });
+                return {
+                    text: response.text || "[empty response]",
+                    protocolWarning: response.protocol_warning || "",
+                    textSource: response.text_source || "",
+                    raw: response.raw || null,
+                };
+            }
+
+            const response = await fetch("/chat/completions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: options.temperature ?? 0.6,
+                    max_tokens: options.maxTokens ?? 256,
+                    top_k: options.topK ?? 50,
+                }),
+            });
+
+            if (!response.ok) {
+                let detail = "Chat request failed";
+                try {
+                    const errorPayload = await response.json();
+                    detail = errorPayload.detail || detail;
+                } catch (error) {
+                    // Use the fallback detail.
+                }
+                throw new Error(detail);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let output = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const chunks = buffer.split("\n\n");
+                buffer = chunks.pop() || "";
+
+                for (const chunk of chunks) {
+                    if (!chunk.startsWith("data: ")) continue;
+                    const payload = JSON.parse(chunk.slice(6));
+                    if (payload.token) {
+                        output += payload.token;
+                    }
+                }
+            }
+
+            return {
+                text: output || "[empty response]",
+                protocolWarning: "",
+                textSource: "stream",
+                raw: null,
+            };
+        }
+
+        async function runQuickPrompt() {
+            if (state.isRunningQuickPrompt) return;
+            const prompt = quickPromptInputEl.value.trim();
+            if (!prompt) {
+                showNotice("Enter a quick prompt first.", "bad");
+                return;
+            }
+            maybeWarnContextPressure("quick_prompt");
+            state.isRunningQuickPrompt = true;
+            quickPromptMetaEl.textContent = "Running quick prompt...";
+            quickPromptOutputEl.value = "";
+            try {
+                const provider = quickPromptProviderEl.value;
+                const temperature = Number(quickPromptTemperatureEl.value || 0.6);
+                const topK = Number(quickPromptTopKEl.value || 50);
+                const maxTokens = Number(quickPromptMaxTokensEl.value || 256);
+                const result = await requestSingleTurnResponse(provider, prompt, { temperature, topK, maxTokens });
+                quickPromptOutputEl.value = result.text;
+                updateLastTelemetry({
+                    provider,
+                    textSource: result.textSource || "",
+                    protocolWarning: result.protocolWarning || "",
+                    promptTokens: result.raw && result.raw.usage ? result.raw.usage.prompt_tokens : null,
+                    completionTokens: result.raw && result.raw.usage ? result.raw.usage.completion_tokens : null,
+                    totalTokens: result.raw && result.raw.usage ? result.raw.usage.total_tokens : null,
+                    finishReason: result.raw && result.raw.choices && result.raw.choices[0] ? result.raw.choices[0].finish_reason || "" : "",
+                });
+                if (result.protocolWarning) {
+                    quickPromptMetaEl.textContent = `Completed via ${provider} with a protocol warning | temp ${temperature} | top-k ${topK} | max tokens ${maxTokens}`;
+                    showNotice(result.protocolWarning, "bad");
+                } else {
+                    quickPromptMetaEl.textContent = `Completed via ${provider} | temp ${temperature} | top-k ${topK} | max tokens ${maxTokens}`;
+                    showNotice("Quick prompt completed.", "good");
+                }
+            } catch (error) {
+                quickPromptMetaEl.textContent = `Quick prompt failed: ${error.message}`;
+                quickPromptOutputEl.value = `[quick prompt error] ${error.message}`;
+                showNotice(error.message, "bad");
+            } finally {
+                state.isRunningQuickPrompt = false;
+            }
+        }
+
+        function copyQuickPromptToConversationLab() {
+            const prompt = quickPromptInputEl.value.trim();
+            const output = quickPromptOutputEl.value.trim();
+            if (!prompt && !output) {
+                showNotice("Run or draft a quick prompt first.", "bad");
+                return;
+            }
+            if (prompt) {
+                appendMessage("user", prompt);
+            }
+            if (output) {
+                appendMessage("assistant", output);
+                state.lastAssistantReply = output;
+            }
+            showNotice("Copied quick prompt exchange into Conversation Lab.", "good");
+        }
+
+        function clearQuickPrompt() {
+            quickPromptInputEl.value = "";
+            quickPromptOutputEl.value = "";
+            renderQuickPromptAuthorityNote();
+        }
+
         async function initialize() {
             initStartupSplash();
             document.querySelectorAll("button").forEach((button) => {
@@ -2703,15 +4371,28 @@
             document.getElementById("applyTruthPresetBtn").addEventListener("click", () => applyPreset("truth_first_teammate"));
             document.getElementById("saveDesignBtn").addEventListener("click", saveDesign);
             document.getElementById("publishDesignBtn").addEventListener("click", publishDesignAction);
+            document.getElementById("draftDesignBtn").addEventListener("click", draftDesignWithRuntime);
+            document.getElementById("fitHardwareBtn").addEventListener("click", () => applyHardwareFit());
             document.getElementById("refreshJobBtn").addEventListener("click", refreshSelectedJob);
+            document.getElementById("pauseJobBtn").addEventListener("click", pauseSelectedJob);
+            document.getElementById("resumeJobBtn").addEventListener("click", resumeSelectedJob);
+            document.getElementById("copyResumeBtn").addEventListener("click", copyResumeFromSelectedJob);
+            document.getElementById("useCheckpointBtn").addEventListener("click", useSelectedCheckpointInEvalOrLoad);
             document.getElementById("stopJobBtn").addEventListener("click", stopSelectedJob);
             document.getElementById("loadChatBtn").addEventListener("click", () => loadChatRuntime());
             document.getElementById("latestSftBtn").addEventListener("click", () => loadChatRuntime({ source: "sft", model_tag: "", step: "", num_gpus: 1 }));
+            document.getElementById("latestRlBtn").addEventListener("click", () => loadChatRuntime({ source: "rl", model_tag: "", step: "", num_gpus: 1 }));
             document.getElementById("startRuntimeBtn").addEventListener("click", startLocalRuntime);
             document.getElementById("stopRuntimeBtn").addEventListener("click", stopLocalRuntime);
+            document.getElementById("applyCockpitBtn").addEventListener("click", () => applyCockpitSettings());
+            document.getElementById("activateCockpitProfileBtn").addEventListener("click", activateCockpitProfile);
+            document.getElementById("resetOperatorControlsBtn").addEventListener("click", resetOperatorControls);
             document.getElementById("autoTuneBtn").addEventListener("click", autoTuneSettings);
             document.getElementById("sendChatBtn").addEventListener("click", sendChat);
             document.getElementById("clearChatBtn").addEventListener("click", clearChat);
+            document.getElementById("runQuickPromptBtn").addEventListener("click", runQuickPrompt);
+            document.getElementById("copyQuickPromptToChatBtn").addEventListener("click", copyQuickPromptToConversationLab);
+            document.getElementById("clearQuickPromptBtn").addEventListener("click", clearQuickPrompt);
             document.getElementById("refreshSandboxBtn").addEventListener("click", refreshBootstrap);
             document.getElementById("refreshActivityBtn").addEventListener("click", refreshBootstrap);
             document.getElementById("newSandboxFileBtn").addEventListener("click", newSandboxFile);
@@ -2725,6 +4406,11 @@
             document.getElementById("loadCorpusBtn").addEventListener("click", () => loadCorpusFile());
             document.getElementById("deleteCorpusBtn").addEventListener("click", deleteCorpusFile);
             document.getElementById("copySandboxToCorpusBtn").addEventListener("click", copySelectedSandboxToCorpus);
+            corpusPathEl.addEventListener("input", () => {
+                if (corpusPathEl.value.trim() !== state.selectedCorpusPath) {
+                    setCorpusEditorMode("text");
+                }
+            });
             runtimeModelSelectEl.addEventListener("change", () => {
                 const runtimeModelPathEl = document.getElementById("runtimeModelPath");
                 if (runtimeModelSelectEl.value && runtimeModelSelectEl.value !== "__custom__") {
@@ -2739,6 +4425,16 @@
                     updateRuntimeModelMeta(null, document.getElementById("runtimeModelPath").value);
                 }
             });
+            document.querySelectorAll("#runtimeForm input, #runtimeForm select, #runtimeForm textarea").forEach((field) => {
+                field.addEventListener("input", saveRuntimeFormSettings);
+                field.addEventListener("change", saveRuntimeFormSettings);
+            });
+            [cockpitBackendProfileEl, cockpitTemperatureEl, cockpitTopKEl, cockpitMaxTokensEl, cockpitAssistantActionsEl, cockpitSystemPromptEl].forEach((field) => {
+                field.addEventListener("input", renderCockpitStatus);
+                field.addEventListener("change", renderCockpitStatus);
+                field.addEventListener("input", saveCockpitSettings);
+                field.addEventListener("change", saveCockpitSettings);
+            });
             document.querySelectorAll("#designForm input, #designForm textarea").forEach((field) => {
                 field.addEventListener("input", () => {
                     state.designDirty = true;
@@ -2750,13 +4446,31 @@
                     sendChat();
                 }
             });
+            chatInputEl.addEventListener("input", renderCockpitStatus);
+            quickPromptInputEl.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    runQuickPrompt();
+                }
+            });
+            quickPromptInputEl.addEventListener("input", renderCockpitStatus);
+            quickPromptProviderEl.addEventListener("change", renderQuickPromptAuthorityNote);
+            chatProviderEl.addEventListener("change", renderCockpitStatus);
+            quickPromptProviderEl.addEventListener("change", renderCockpitStatus);
+            assistantToolsEnabledEl.addEventListener("change", renderCockpitStatus);
             document.querySelectorAll("[data-job]").forEach((button) => {
                 button.addEventListener("click", () => launchJob(button.dataset.job, button.dataset.form || null));
             });
 
             await refreshBootstrap();
+            loadCockpitSettings();
+            loadRuntimeFormSettings();
+            setCorpusEditorMode("text");
             renderChatMessages();
             applyPreset("truth_first_teammate");
+            applyCockpitSettings({ silent: true });
+            renderCockpitStatus();
+            renderQuickPromptAuthorityNote();
 
             state.pollingHandle = window.setInterval(async () => {
                 try {
@@ -2765,6 +4479,13 @@
                     console.warn("Polling error", error);
                 }
             }, 4000);
+            state.ecgPollingHandle = window.setInterval(async () => {
+                try {
+                    await refreshEcg();
+                } catch (error) {
+                    console.warn("ECG polling error", error);
+                }
+            }, 1000);
         }
 
         initialize().catch((error) => {

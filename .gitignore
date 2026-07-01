@@ -1,0 +1,17 @@
+nanochat-master/.venv/
+nanochat-master/.pytest_cache/
+nanochat-master/models/
+nanochat-master/runtime/models/
+nanochat-master/Assistant_models/
+nanochat-master/assistant_models/
+nanochat-master/local_corpus/
+nanochat-master/builder_logs/*.jsonl
+nanochat-master/Assistant_sandbox/*.jsonl
+nanochat-master/assistant_sandbox/*.jsonl
+nanochat-master/Assistant_sandbox/notes/
+nanochat-master/assistant_sandbox/notes/
+ecg_window/
+__pycache__/
+*.pyc
+tmp-builder-*.log
+tmp-dashboard-*.log

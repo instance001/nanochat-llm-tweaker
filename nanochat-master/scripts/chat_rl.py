@@ -19,11 +19,14 @@ torchrun --standalone --nproc_per_node=8 -m scripts.chat_rl -- --run=default
 import argparse
 import os
 import itertools
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
 import torch
 import torch.distributed as dist
 from nanochat.common import compute_init, compute_cleanup, print0, get_base_dir, DummyWandb, autodetect_device_type
-from nanochat.checkpoint_manager import save_checkpoint, load_model
+from nanochat.checkpoint_manager import save_checkpoint, load_model, load_optimizer_state
 from nanochat.engine import Engine
 from tasks.gsm8k import GSM8K
 
@@ -37,6 +40,7 @@ parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (e
 # Model loading
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
+parser.add_argument("--resume-from-step", type=int, default=-1, help="resume RL from this RL checkpoint step (-1 = disable)")
 # Training horizon
 parser.add_argument("--num-epochs", type=int, default=1, help="number of epochs over GSM8K")
 # Batch sizes / sampling
@@ -68,10 +72,19 @@ master_process = ddp_rank == 0 # this process will do logging, checkpointing etc
 
 # wandb logging init
 use_dummy_wandb = args.run == "dummy" or not master_process
+if wandb is None:
+    use_dummy_wandb = True
 wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat-rl", name=args.run, config=user_config)
+if wandb is None and master_process:
+    print0("wandb is not installed; using local dummy logger.")
 
 # Init model and tokenizer
-model, tokenizer, meta = load_model("sft", device, phase="eval", model_tag=args.model_tag, step=args.model_step)
+resuming = args.resume_from_step != -1
+if resuming:
+    print0(f"Resuming RL optimization from step {args.resume_from_step}")
+    model, tokenizer, meta = load_model("rl", device, phase="train", model_tag=args.model_tag, step=args.resume_from_step)
+else:
+    model, tokenizer, meta = load_model("sft", device, phase="eval", model_tag=args.model_tag, step=args.model_step)
 engine = Engine(model, tokenizer) # for sampling rollouts
 
 # -----------------------------------------------------------------------------
@@ -201,6 +214,18 @@ optimizer = model.setup_optimizer(
     weight_decay=args.weight_decay,
 )
 
+if resuming:
+    optimizer_data = load_optimizer_state("rl", device, rank=ddp_rank, model_tag=args.model_tag, step=args.resume_from_step)
+    if optimizer_data is not None:
+        base_lrs = [group["lr"] for group in optimizer.param_groups]
+        optimizer.load_state_dict(optimizer_data)
+        del optimizer_data
+        for group, base_lr in zip(optimizer.param_groups, base_lrs):
+            group["lr"] = base_lr
+        print0("Loaded optimizer state from prior RL checkpoint")
+    else:
+        print0("WARNING: RL optimizer checkpoint not found, resuming with a fresh optimizer state")
+
 # Set the initial learning rate as a fraction of the base learning rate
 for group in optimizer.param_groups:
     group["lr"] = group["lr"] * args.init_lr_frac
@@ -219,7 +244,8 @@ print0(f"Calculated examples per rank: {examples_per_rank}")
 
 # Kick off the training loop
 batch_iterator = get_batch()
-for step in range(num_steps):
+start_step = int(meta.get("step", args.resume_from_step + 1 if resuming else 0))
+for step in range(start_step, num_steps):
 
     # Evaluate the model once in a while and log to wandb
     if step % args.eval_every == 0:
@@ -315,9 +341,11 @@ for step in range(num_steps):
             checkpoint_dir,
             step,
             model.state_dict(),
-            None, # note: we don't bother to save the optimizer state
+            optimizer.state_dict(),
             {
+                "step": step + 1,
                 "model_config": model_config_kwargs,
+                "user_config": user_config,
             }
         )
         print(f"✅ Saved model checkpoint to {checkpoint_dir}")

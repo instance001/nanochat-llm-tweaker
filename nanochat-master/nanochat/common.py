@@ -142,6 +142,14 @@ def print_banner():
     """
     print0(banner)
 
+def print_banner():
+    banner = """
+    ============================================================
+                           NANOCHAT
+    ============================================================
+    """
+    print0(banner)
+
 def is_ddp_requested() -> bool:
     """
     True if launched by torchrun (env present), even before init.
@@ -154,7 +162,12 @@ def is_ddp_initialized() -> bool:
     True if torch.distributed is available and the process group is initialized.
     Used at cleanup to avoid destroying a non-existent PG.
     """
-    return dist.is_available() and dist.is_initialized()
+    if not hasattr(dist, "is_available") or not dist.is_available():
+        return False
+    is_initialized = getattr(dist, "is_initialized", None)
+    if is_initialized is None:
+        return False
+    return bool(is_initialized())
 
 def get_dist_info():
     if is_ddp_requested():

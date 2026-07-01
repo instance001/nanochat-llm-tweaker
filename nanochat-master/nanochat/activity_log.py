@@ -16,6 +16,7 @@ class ActivityLogManager:
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self._last_event: dict[str, Any] | None = None
 
     def log_event(self, kind: str, message: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         event = {
@@ -28,6 +29,7 @@ class ActivityLogManager:
         with self._lock:
             with open(self.path, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
+            self._last_event = event
         return event
 
     def recent_events(self, limit: int = 80) -> list[dict[str, Any]]:
@@ -70,3 +72,15 @@ class ActivityLogManager:
             "event_count": len(events),
             "events": events,
         }
+
+    def latest_event(self) -> dict[str, Any] | None:
+        with self._lock:
+            if self._last_event is not None:
+                return dict(self._last_event)
+        events = self.recent_events(limit=1)
+        latest = events[-1] if events else None
+        if latest is not None:
+            with self._lock:
+                self._last_event = latest
+            return dict(latest)
+        return None

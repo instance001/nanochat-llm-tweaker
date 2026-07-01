@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import socket
 import subprocess
 import threading
 import time
@@ -14,6 +16,11 @@ import urllib.request
 from collections import deque
 from pathlib import Path
 from typing import Any
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 MODEL_PATTERNS = ("*.gguf", "*.GGUF", "*.ggml")
 LOG_LIMIT = 2000
@@ -32,10 +39,17 @@ class LocalRuntimeManager:
         self._ready = False
         self._last_error: str | None = None
         self._thread: threading.Thread | None = None
+        self._bundle_cache: dict[str, Any] | None = None
+        self._bundle_cache_ts = 0.0
+        self._bundle_cache_ttl_s = 5.0
 
-    def bundle_status(self) -> dict[str, Any]:
+    def bundle_status(self, refresh: bool = False) -> dict[str, Any]:
+        now = time.time()
+        if not refresh and self._bundle_cache is not None and (now - self._bundle_cache_ts) < self._bundle_cache_ttl_s:
+            return self._bundle_cache
         runtime_exists = self.runtime_dir.exists()
         models = self.list_models()
+        devices = self._list_devices() if self.server_binary.exists() else []
         files = {
             "server_binary": str(self.server_binary),
             "server_exists": self.server_binary.exists(),
@@ -43,14 +57,21 @@ class LocalRuntimeManager:
             "vulkan_exists": (self.runtime_dir / "ggml-vulkan.dll").exists(),
             "llama_cli_exists": (self.runtime_dir / "llama-cli.exe").exists(),
         }
-        return {
+        payload = {
             "runtime_dir": str(self.runtime_dir),
             "runtime_exists": runtime_exists,
             "files": files,
-            "devices": self._list_devices() if files["server_exists"] else [],
+            "devices": devices if files["server_exists"] else [],
             "models": models,
             "recommended_model": models[0] if models else None,
+            "recommended_config": self.recommended_start_config(
+                models=models,
+                devices=devices if files["server_exists"] else [],
+            ),
         }
+        self._bundle_cache = payload
+        self._bundle_cache_ts = now
+        return payload
 
     def list_models(self) -> list[dict[str, Any]]:
         roots = [
@@ -90,6 +111,83 @@ class LocalRuntimeManager:
             result.pop("score", None)
         return results[:200]
 
+    def recommended_start_config(
+        self,
+        overrides: dict[str, Any] | None = None,
+        *,
+        models: list[dict[str, Any]] | None = None,
+        devices: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        overrides = overrides or {}
+        models = models if models is not None else self.list_models()
+        devices = devices if devices is not None else self._list_devices()
+
+        logical_cpus = max(1, os.cpu_count() or 1)
+        physical_cpus = logical_cpus
+        system_ram_gb = 0.0
+        if psutil is not None:
+            try:
+                physical_cpus = psutil.cpu_count(logical=False) or logical_cpus
+            except Exception:
+                physical_cpus = logical_cpus
+            try:
+                system_ram_gb = float(psutil.virtual_memory().total / (1024 ** 3))
+            except Exception:
+                system_ram_gb = 0.0
+
+        recommended_model = models[0] if models else None
+        model_path = str(overrides.get("model_path") or (recommended_model["path"] if recommended_model else ""))
+        model_size_gb = float((recommended_model or {}).get("size", 0)) / (1024 ** 3) if recommended_model else 0.0
+        gpu_memory_gb = max((self._parse_device_memory_gb(device.get("description", "")) for device in devices), default=0.0)
+
+        threads = max(4, min(physical_cpus or logical_cpus, 16))
+        threads_http = max(2, min(8, max(2, logical_cpus // 4 or 1)))
+        ctx_size = 8192
+        parallel = 2
+
+        if not devices:
+            parallel = 1
+            threads = max(4, min(physical_cpus or logical_cpus, 12))
+            threads_http = max(2, min(4, max(2, logical_cpus // 4 or 1)))
+            if system_ram_gb and system_ram_gb < 24:
+                ctx_size = 4096
+            elif system_ram_gb and system_ram_gb < 48:
+                ctx_size = 6144
+            else:
+                ctx_size = 8192
+        elif gpu_memory_gb < 10:
+            ctx_size = 6144
+            parallel = 1
+            threads_http = 2
+        elif gpu_memory_gb < 20:
+            ctx_size = 8192
+            parallel = 2
+            threads_http = max(2, min(4, threads_http))
+        elif gpu_memory_gb < 40:
+            ctx_size = 8192
+            parallel = 2
+        else:
+            ctx_size = 12288
+            parallel = 4
+
+        if model_size_gb >= 12 and not devices:
+            parallel = 1
+            if system_ram_gb >= 32:
+                ctx_size = max(ctx_size, 8192)
+
+        return {
+            "model_path": model_path,
+            "port": int(overrides.get("port", 8091)),
+            "ctx_size": int(overrides.get("ctx_size", ctx_size)),
+            "threads": int(overrides.get("threads", threads)),
+            "threads_http": int(overrides.get("threads_http", threads_http)),
+            "parallel": int(overrides.get("parallel", parallel)),
+            "alias": str(overrides.get("alias", "local-runtime")),
+            "device_strategy": str(overrides.get("device_strategy", "auto")),
+            "gpu_layers": str(overrides.get("gpu_layers", "auto")),
+            "preferred_device": str(overrides.get("preferred_device", "")),
+        }
+
     def status(self) -> dict[str, Any]:
         bundle = self.bundle_status()
         with self._lock:
@@ -111,6 +209,7 @@ class LocalRuntimeManager:
     def start(self, config: dict[str, Any]) -> dict[str, Any]:
         if not self.server_binary.exists():
             raise FileNotFoundError(f"Missing runtime binary: {self.server_binary}")
+        self.invalidate_bundle_cache()
 
         model_path_value = config.get("model_path", "")
         if not model_path_value:
@@ -138,6 +237,20 @@ class LocalRuntimeManager:
             "gpu_layers": str(config.get("gpu_layers", "auto")),
             "preferred_device": config.get("preferred_device", ""),
         }
+        existing_process = self._process
+        existing_host = str(self._config.get("host", "")) if self._config else ""
+        existing_port = int(self._config.get("port", -1)) if self._config else -1
+        same_runtime = (
+            existing_process is not None
+            and existing_process.poll() is None
+            and existing_host == requested["host"]
+            and existing_port == requested["port"]
+        )
+        if self._port_in_use(requested["host"], requested["port"]) and not same_runtime:
+            raise RuntimeError(
+                f"Runtime port {requested['port']} is already in use. "
+                "Stop the other runtime or choose a different runtime port."
+            )
 
         attempts = self._build_attempts(requested)
         last_error = "Runtime failed to start"
@@ -158,6 +271,7 @@ class LocalRuntimeManager:
         raise RuntimeError(last_error)
 
     def stop(self) -> dict[str, Any]:
+        self.invalidate_bundle_cache()
         with self._lock:
             process = self._process
             self._ready = False
@@ -173,6 +287,10 @@ class LocalRuntimeManager:
         with self._lock:
             self._process = None
         return self.status()
+
+    def invalidate_bundle_cache(self) -> None:
+        self._bundle_cache = None
+        self._bundle_cache_ts = 0.0
 
     def chat(
         self,
@@ -203,9 +321,17 @@ class LocalRuntimeManager:
         if not choices:
             raise RuntimeError("Runtime returned no choices")
         message = choices[0].get("message", {})
-        text = self._clean_response_text(message.get("content", ""))
+        text, text_source = self._extract_message_text(message)
+        protocol_warning = None
+        if text_source == "reasoning_content":
+            protocol_warning = (
+                "The local model returned reasoning-only text instead of a final answer. "
+                "The cockpit protocol was sent, but this model ignored it for that reply."
+            )
         return {
             "text": text,
+            "text_source": text_source,
+            "protocol_warning": protocol_warning,
             "raw": response,
         }
 
@@ -339,6 +465,17 @@ class LocalRuntimeManager:
             devices.append({"id": device_id.strip(), "description": description.strip()})
         return devices
 
+    def _port_in_use(self, host: str, port: int) -> bool:
+        probe_host = host
+        if probe_host in {"0.0.0.0", "::", ""}:
+            probe_host = "127.0.0.1"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.25)
+            try:
+                return sock.connect_ex((probe_host, int(port))) == 0
+            except OSError:
+                return False
+
     def _json_request(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         request = urllib.request.Request(
             url,
@@ -370,6 +507,39 @@ class LocalRuntimeManager:
             if marker in cleaned:
                 cleaned = cleaned.split(marker, 1)[0]
         return cleaned.strip()
+
+    def _extract_message_text(self, message: dict[str, Any]) -> tuple[str, str]:
+        content = self._clean_response_text(self._stringify_message_value(message.get("content", "")))
+        if content:
+            return content, "content"
+
+        reasoning = self._clean_response_text(self._stringify_message_value(message.get("reasoning_content", "")))
+        if reasoning:
+            return reasoning, "reasoning_content"
+
+        return "", "empty"
+
+    def _stringify_message_value(self, value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts = [self._stringify_message_value(item) for item in value]
+            return "\n".join(part for part in parts if part)
+        if isinstance(value, dict):
+            if isinstance(value.get("text"), str):
+                return value["text"]
+            if isinstance(value.get("content"), str):
+                return value["content"]
+            if isinstance(value.get("value"), str):
+                return value["value"]
+            return ""
+        return ""
+
+    def _parse_device_memory_gb(self, description: str) -> float:
+        match = re.search(r"\((\d+)\s+MiB", description)
+        if match:
+            return round(int(match.group(1)) / 1024, 1)
+        return 0.0
 
     def _score_model(self, name: str, size: int) -> int:
         lower = name.lower()

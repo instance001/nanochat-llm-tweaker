@@ -2,6 +2,13 @@
 
 LLM Tweaker Builder is a local-first fork built around Andrej Karpathy's `nanochat`, adapted into a guided builder dashboard with a GGUF helper assistant and drop-in ChattyCog module packaging. It is designed for people who want a more approachable path into local corpus prep, tokenizer training, base-model training, chat SFT, and checkpoint testing without losing sight of the upstream nanochat lineage.
 
+Notable local-builder additions include:
+
+- `.parquet` corpus support alongside the original text/code path
+- hardware-fit runtime defaults for consumer machines
+- pause and resume for long local jobs
+- a dashboard ECG window that gives a live visual answer to whether the machine is active, idle, or potentially stalled
+
 This package is aimed at users who may be new to:
 
 - local model tooling
@@ -11,6 +18,7 @@ This package is aimed at users who may be new to:
 
 If you are starting from zero, begin with:
 
+- [nanochat-master/ZERO_EXPERIENCE_END_TO_END_GUIDE.md](nanochat-master/ZERO_EXPERIENCE_END_TO_END_GUIDE.md)
 - [nanochat-master/LOCAL_BUILDER_USER_MANUAL.md](nanochat-master/LOCAL_BUILDER_USER_MANUAL.md)
 
 If you want the short version:

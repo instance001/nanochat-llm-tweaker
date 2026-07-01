@@ -5,6 +5,8 @@ import math
 import torch
 import torch.distributed as dist
 
+from nanochat.common import is_ddp_initialized
+
 @torch.no_grad()
 def evaluate_bpb(model, batches, steps, token_bytes):
     """
@@ -52,7 +54,7 @@ def evaluate_bpb(model, batches, steps, token_bytes):
             total_nats += (loss2d * (num_bytes2d > 0)).sum()
             total_bytes += num_bytes2d.sum()
     # sum reduce across all ranks
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    world_size = dist.get_world_size() if is_ddp_initialized() else 1
     if world_size > 1:
         dist.all_reduce(total_nats, op=dist.ReduceOp.SUM)
         dist.all_reduce(total_bytes, op=dist.ReduceOp.SUM)

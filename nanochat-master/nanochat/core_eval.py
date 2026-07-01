@@ -11,6 +11,8 @@ from jinja2 import Template
 import torch
 import torch.distributed as dist
 
+from nanochat.common import is_ddp_initialized
+
 # -----------------------------------------------------------------------------
 # Prompt rendering utilities
 
@@ -246,8 +248,8 @@ def evaluate_task(model, tokenizer, data, device, task_meta):
     This function is responsible for evaluating one task across many examples.
     It also handles dispatch to all processes if the script is run with torchrun.
     """
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    rank = dist.get_rank() if is_ddp_initialized() else 0
+    world_size = dist.get_world_size() if is_ddp_initialized() else 1
     correct = torch.zeros(len(data), dtype=torch.float32, device=device)
     # stride the examples to each rank
     for idx in range(rank, len(data), world_size):

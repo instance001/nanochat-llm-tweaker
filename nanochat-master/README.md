@@ -4,6 +4,7 @@ This folder contains the local builder app that powers the `LLM Tweaker Builder`
 
 If you are new to this project, start here:
 
+- [ZERO_EXPERIENCE_END_TO_END_GUIDE.md](ZERO_EXPERIENCE_END_TO_END_GUIDE.md)
 - [LOCAL_BUILDER_USER_MANUAL.md](LOCAL_BUILDER_USER_MANUAL.md)
 
 Important context:
@@ -11,6 +12,24 @@ Important context:
 - this folder is based on Andrej Karpathy's `nanochat`
 - parts of the README below are still useful upstream background
 - parts of the upstream README describe cloud, remote, or research-heavy workflows that are not the intended first path for this local dashboard build
+
+## Local Fork Notes
+
+This fork adds a guided local dashboard and local-runtime workflow on top of upstream `nanochat`.
+
+For day-to-day use in this repo, the most important local-fork behaviors are:
+
+- local corpus ingestion supports both plain text/code files and `.parquet` files when `pyarrow` is installed
+- the Windows launcher now auto-detects and loads the Visual Studio x64 build environment when it is available, which helps local CPU `torch.compile` runs succeed more reliably
+- the dashboard includes hardware-fit guidance so smaller local machines can start from safer settings instead of immediately overcommitting RAM or VRAM
+- the dashboard now includes an ECG window that shows live CPU or GPU activity plus recent builder movement, so you can quickly tell whether the box is working, merely quiet, or possibly stalled
+- long-running training jobs can be paused and resumed from saved checkpoints instead of forcing you to restart from zero
+- the local GGUF assistant now receives a built-in llm-tweaker cockpit protocol so it better understands its role, and the dashboard warns if a model still emits reasoning-only output
+
+If you are using this fork as a local builder instead of following the upstream cloud-oriented workflow, start with:
+
+- [ZERO_EXPERIENCE_END_TO_END_GUIDE.md](ZERO_EXPERIENCE_END_TO_END_GUIDE.md)
+- [LOCAL_BUILDER_USER_MANUAL.md](LOCAL_BUILDER_USER_MANUAL.md)
 
 ## Licensing Note
 

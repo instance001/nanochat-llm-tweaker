@@ -40,6 +40,7 @@ parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (e
 parser.add_argument("--model-tag", type=str, default=None, help="model tag to load from")
 parser.add_argument("--model-step", type=int, default=None, help="model step to load from")
 parser.add_argument("--load-optimizer", type=int, default=1, help="warm-start optimizer from pretrained checkpoint (0=no, 1=yes)")
+parser.add_argument("--resume-from-step", type=int, default=-1, help="resume SFT from this SFT checkpoint step (-1 = disable)")
 # Training horizon
 parser.add_argument("--num-iterations", type=int, default=-1, help="number of optimization steps (-1 = full epoch)")
 # Batch sizes (default: inherit from pretrained checkpoint)
@@ -58,6 +59,7 @@ parser.add_argument("--final-lr-frac", type=float, default=0.0, help="final LR a
 parser.add_argument("--eval-every", type=int, default=200, help="evaluate val bpb every N steps (-1 = disable)")
 parser.add_argument("--eval-tokens", type=int, default=40*524288, help="number of tokens to evaluate val loss on")
 parser.add_argument("--chatcore-every", type=int, default=-1, help="reserved benchmark eval hook (disabled in local-only mode)")
+parser.add_argument("--save-every", type=int, default=-1, help="save checkpoints every N steps (-1 = only at end)")
 parser.add_argument("--train-files", type=str, default="", help="semicolon or newline separated local JSONL conversation files for SFT")
 parser.add_argument("--val-files", type=str, default="", help="optional semicolon or newline separated local JSONL validation files")
 parser.add_argument("--identity-file", type=str, default="", help="override identity JSONL file (default: published identity_conversations.jsonl)")
@@ -99,8 +101,15 @@ if local_only and args.chatcore_every > 0:
 if not HAS_FA3:
     print0("WARNING: Flash Attention 3 not available, using PyTorch SDPA fallback. Training will be less efficient.")
 
+base_dir = get_base_dir()
+resuming = args.resume_from_step != -1
+
 # Load the model and tokenizer
-model, tokenizer, meta = load_model("base", device, phase="train", model_tag=args.model_tag, step=args.model_step)
+if resuming:
+    print0(f"Resuming SFT optimization from step {args.resume_from_step}")
+    model, tokenizer, meta = load_model("sft", device, phase="train", model_tag=args.model_tag, step=args.resume_from_step)
+else:
+    model, tokenizer, meta = load_model("base", device, phase="train", model_tag=args.model_tag, step=args.model_step)
 
 # Inherit training hyperparameters from pretrained checkpoint (None = inherit, explicit value = override)
 pretrain_user_config = meta.get("user_config", {})
@@ -144,8 +153,18 @@ optimizer = model.setup_optimizer(unembedding_lr=args.unembedding_lr, embedding_
 # Note: load_state_dict overwrites param_group metadata (LRs, betas, etc.) with the
 # pretrained values. Since pretraining warmdown brings LRs to ~0, we must save and
 # restore our fresh SFT LRs after loading.
-base_dir = get_base_dir()
-if args.load_optimizer:
+if resuming:
+    optimizer_data = load_optimizer_state("sft", device, rank=ddp_rank, model_tag=args.model_tag, step=args.resume_from_step)
+    if optimizer_data is not None:
+        base_lrs = [group["lr"] for group in optimizer.param_groups]
+        optimizer.load_state_dict(optimizer_data)
+        del optimizer_data
+        for group, base_lr in zip(optimizer.param_groups, base_lrs):
+            group["lr"] = base_lr
+        print0("Loaded optimizer state from prior SFT checkpoint")
+    else:
+        print0("WARNING: SFT optimizer checkpoint not found, resuming with a fresh optimizer state")
+elif args.load_optimizer:
     optimizer_data = load_optimizer_state("base", device, rank=ddp_rank, model_tag=args.model_tag, step=args.model_step)
     if optimizer_data is not None:
         base_lrs = [group["lr"] for group in optimizer.param_groups]
@@ -233,7 +252,7 @@ elif args.eval_every > 0:
 last_step = False # we will toggle this to True when we reach the end of the training dataset
 approx_progress = 0.0 # will go from 0 to 1 over the course of the epoch
 current_epoch = 1 # track epoch for logging
-def sft_data_generator_bos_bestfit(split, buffer_size=100):
+def sft_data_generator_bos_bestfit(split, buffer_size=100, resume_state_dict=None):
     """
     BOS-aligned dataloader for SFT with bestfit-pad packing.
 
@@ -252,10 +271,11 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
 
     # Conversation buffer: list of (token_ids, loss_mask) tuples
     conv_buffer = []
-    cursor = ddp_rank  # Each rank processes different conversations (for fetching)
-    consumed = ddp_rank  # Track actual consumption separately from buffering
-    epoch = 1
-    it = 0  # iteration counter
+    resume_state_dict = resume_state_dict or {}
+    cursor = int(resume_state_dict.get("cursor", ddp_rank))  # Each rank processes different conversations (for fetching)
+    consumed = int(resume_state_dict.get("consumed", ddp_rank))  # Track actual consumption separately from buffering
+    epoch = int(resume_state_dict.get("epoch", 1))
+    it = int(resume_state_dict.get("iteration", 0))  # iteration counter
 
     def refill_buffer():
         nonlocal cursor, epoch
@@ -351,11 +371,22 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
             if content_len < row_capacity:
                 targets[i, content_len-1:] = -1
 
-        yield inputs, targets
+        if split == "train":
+            resume_state = {
+                "cursor": cursor,
+                "consumed": consumed,
+                "epoch": epoch,
+                "iteration": it,
+            }
+            yield inputs, targets, resume_state
+        else:
+            yield inputs, targets
 
-train_loader = sft_data_generator_bos_bestfit("train")
+dataloader_resume_state_dict = meta.get("dataloader_state_dict") if resuming else None
+loop_state = meta.get("loop_state", {}) if resuming else {}
+train_loader = sft_data_generator_bos_bestfit("train", resume_state_dict=dataloader_resume_state_dict)
 build_val_loader = lambda: sft_data_generator_bos_bestfit("val")
-progress = 0 # will go from 0 to 1 over the course of the epoch
+progress = float(loop_state.get("progress", 0.0)) # will go from 0 to 1 over the course of the epoch
 
 # Learning rate schedule (linear warmup, constant, linear warmdown)
 # Same shape as base_train but uses progress (0→1) instead of absolute step counts,
@@ -377,12 +408,16 @@ def get_muon_momentum(it):
 
 # -----------------------------------------------------------------------------
 # Training loop
-x, y = next(train_loader) # prefetch the very first batch of data
-min_val_bpb = float("inf")
+x, y, dataloader_state_dict = next(train_loader) # prefetch the very first batch of data
+min_val_bpb = float(loop_state.get("min_val_bpb", float("inf")))
 smooth_train_loss = 0 # EMA of training loss
 ema_beta = 0.9 # EMA decay factor
-total_training_time = 0 # total wall-clock time of training
-step = 0
+smooth_train_loss = float(loop_state.get("smooth_train_loss", smooth_train_loss))
+total_training_time = float(loop_state.get("total_training_time", 0.0)) # total wall-clock time of training
+current_epoch = int(loop_state.get("current_epoch", current_epoch))
+approx_progress = float(loop_state.get("approx_progress", approx_progress))
+step = int(meta.get("step", args.resume_from_step if resuming else 0))
+val_bpb = None
 while True:
     flops_so_far = num_flops_per_token * args.total_batch_size * step
 
@@ -409,8 +444,8 @@ while True:
         })
         model.train()
 
-    # save checkpoint at the end of the run (all ranks participate so each saves its optimizer shard)
-    if last_step:
+    # save checkpoint: at the end of the run, or periodically for later resume
+    if last_step or (step > 0 and step != args.resume_from_step and args.save_every > 0 and step % args.save_every == 0):
         output_dirname = args.model_tag if args.model_tag else f"d{depth}" # e.g. d12
         checkpoint_dir = os.path.join(base_dir, "chatsft_checkpoints", output_dirname)
         save_checkpoint(
@@ -431,6 +466,15 @@ while True:
                     "window_pattern": model.config.window_pattern,
                 },
                 "user_config": user_config, # inputs to the training script
+                "dataloader_state_dict": dataloader_state_dict,
+                "loop_state": {
+                    "min_val_bpb": min_val_bpb,
+                    "smooth_train_loss": smooth_train_loss,
+                    "total_training_time": total_training_time,
+                    "progress": progress,
+                    "approx_progress": approx_progress,
+                    "current_epoch": current_epoch,
+                },
             },
             rank=ddp_rank,
         )
@@ -451,7 +495,7 @@ while True:
             scaler.scale(loss).backward()
         else:
             loss.backward()
-        x, y = next(train_loader) # prefetch the next batch while the GPU is busy with forward/backward
+        x, y, dataloader_state_dict = next(train_loader) # prefetch the next batch while the GPU is busy with forward/backward
         progress = max(progress, approx_progress) # only increase progress monotonically
     # step the optimizer
     lrm = get_lr_multiplier(progress)
