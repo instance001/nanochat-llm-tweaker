@@ -82,6 +82,251 @@ In plain English:
 - the GGUF model helps you build
 - the nanochat training pipeline builds the model you actually own and train here
 
+## If This Is Your First Time Building Or Training An LLM
+
+This section is for the person who is thinking:
+
+- I have heard the words, but I do not really know what these tasks mean
+- I can follow instructions, but I want to understand what I am actually doing
+- I do not want the process to feel like superstition
+
+That is a good instinct.
+
+You do not need to become an ML researcher to use this builder, but you do need a plain-language mental model of the tasks.
+
+### What An LLM Actually Is
+
+An LLM is a machine-learning model that tries to predict the next piece of text based on the text that came before it.
+
+Plain English:
+
+- it does not store truth the way a normal document does
+- it learns patterns from examples
+- the quality of those examples strongly affects how it behaves later
+
+That means:
+
+- bad data can teach bad habits
+- confused instructions can produce confused behavior
+- a tiny model on a tiny dataset can still be useful, but it will not become magic
+
+### What Training Means
+
+Training means adjusting the model's internal numbers so it gets better at predicting text from examples.
+
+Plain English:
+
+- the model reads examples
+- it makes guesses
+- the system measures how wrong those guesses were
+- then it nudges the model so the next guesses are a bit better
+
+Training is not:
+
+- copying a file into memory
+- storing exact facts on purpose
+- a guarantee that the model will always say the right thing
+
+### What A Tokenizer Is
+
+A tokenizer is the part that breaks text into chunks called tokens before the model sees it.
+
+Plain English:
+
+- the model does not read text the way a human reads whole words on a page
+- it reads token pieces
+- those pieces might be words, word fragments, punctuation, or common patterns
+
+Why it matters:
+
+- a bad tokenizer makes learning harder
+- a reasonable tokenizer helps the model use its small capacity more effectively
+
+### What Base Training Is
+
+Base training teaches the model general language patterns from the broad corpus.
+
+This is the stage where it learns things like:
+
+- how sentences are shaped
+- how code tends to look
+- how explanations and references are usually structured
+
+Plain English:
+
+- this is the `general reading pile` stage
+- it is not yet the `be this specific helpful assistant` stage
+
+### What Fine-Tuning Is
+
+Fine-tuning means taking a base model and teaching it more specific behavior with more focused examples.
+
+In this builder, the main fine-tuning stage is Chat SFT.
+
+Plain English:
+
+- base training teaches general language habits
+- fine-tuning teaches the model how you want it to respond in practice
+
+This is where the model learns things like:
+
+- how to answer like a teammate
+- how to admit uncertainty
+- how to follow your chosen tone and rules
+
+### What SFT Means
+
+SFT means supervised fine-tuning.
+
+That sounds intimidating, but the practical meaning is simple:
+
+- you give the model example conversations
+- each conversation shows what a good response should look like
+- the model gets better at copying those good response patterns
+
+Plain English:
+
+- SFT is teaching by example
+- you are showing the model what `good` looks like in conversation form
+
+### What RL Means Here
+
+RL means reinforcement-learning-style tuning.
+
+In this project, it is the more advanced stage after SFT.
+
+Plain English:
+
+- SFT gets the model into a usable assistant shape
+- RL is for later experimentation when you want to push or refine behavior further
+
+If you are new:
+
+- do not treat RL as the first important step
+- get tokenizer, base, and SFT working first
+
+### What Evaluation Means
+
+Evaluation means checking how the model is doing instead of just hoping it is better.
+
+That can include:
+
+- loss-style numbers
+- benchmark results
+- sample outputs
+- quick smoke tests in chat
+
+Plain English:
+
+- evaluation is how you avoid guessing blindly
+- it is the `show me evidence` part of the workflow
+
+### What Tuning Means
+
+Tuning means changing settings to make the process fit your goal or your hardware better.
+
+Common things you tune here include:
+
+- model size
+- sequence length
+- batch size
+- training duration
+- runtime context size
+- temperature and token limits during testing
+
+Plain English:
+
+- tuning is not magic
+- it is mostly the art of making tradeoffs on purpose
+
+### The Main Data Types In This Builder
+
+You are working with different kinds of data for different jobs.
+
+#### 1. Local Corpus Data
+
+Used for:
+
+- tokenizer training
+- base model training
+
+Plain English:
+
+- this is the general reading material
+
+#### 2. Identity Data
+
+Used for:
+
+- teaching the assistant how it should think about its role and behavior
+
+Plain English:
+
+- this is the assistant charter
+
+#### 3. Chat SFT Data
+
+Used for:
+
+- teaching real conversation behavior through examples
+
+Plain English:
+
+- this is the set of example dialogues showing how the assistant should answer
+
+### Why Small First Runs Matter
+
+New users often want to launch a big run immediately.
+
+That is understandable, but usually the smarter move is:
+
+1. prove the pipeline works
+2. prove the files are valid
+3. prove the runtime fits the machine
+4. only then spend more time and compute
+
+Plain English:
+
+- first make it work
+- then make it bigger
+
+### What Usually Goes Wrong For Beginners
+
+The most common early problems are not exotic ML failures.
+
+They are usually:
+
+- the corpus is missing or too messy
+- the training files are malformed
+- the model is too large for the machine
+- the user changes too many settings at once
+- the user cannot tell whether the system is idle, stalled, or actually broken
+
+That is why this fork includes things like:
+
+- hardware-fit defaults
+- pause and resume
+- the ECG window
+- process logs
+- guided presets
+
+### The Best Beginner Mindset
+
+Think of this builder as a lab bench, not a vending machine.
+
+Good mindset:
+
+- start small
+- change one important thing at a time
+- keep notes
+- trust evaluation more than vibes
+- review the assistant's drafted data before training on it
+
+Best short version:
+
+- you are not pressing a button to summon intelligence
+- you are building behavior step by step from data, settings, and iteration
+
 ## Folder Map
 
 These folders matter most:
@@ -797,6 +1042,431 @@ This is how it can "see" what has been happening recently.
 The underlying log file is:
 
 `builder_logs/activity.jsonl`
+
+## 17. Common Functions In Plain Language
+
+This section is a practical glossary for the main buttons, actions, and functions in the dashboard.
+
+Use it when you are looking at a control and thinking:
+
+- what is this for?
+- when should I use it?
+- what happens if I click it?
+
+### Quick Reference Table
+
+| Function | Plain-language purpose | Use it when |
+|----------|------------------------|-------------|
+| `Fit To Hardware` | Fill forms with safer machine-sized starter settings | You want a safer default before running jobs |
+| `Save Design` | Save the current assistant blueprint draft | You want to keep or revisit the current design |
+| `Publish As Active Identity File` | Turn the current design into the active identity training file | You want SFT to use this identity |
+| `Draft With GGUF` | Ask the helper model to draft a blueprint from a plain-language goal | You want a first draft without filling every field manually |
+| `Train Tokenizer` | Build the tokenizer from the local corpus | Your corpus is ready and you want to begin the pipeline |
+| `Run Tokenizer Eval` | Check tokenizer quality on sample corpus data | You want a quick tokenizer sanity check |
+| `Launch Base Training` | Train the underlying language model from the corpus | The tokenizer exists and you want a base model |
+| `Run Base Eval` | Smoke-test the current base checkpoint | You want a quick quality check on the base model |
+| `Launch Chat SFT` | Fine-tune the model on local chat JSONL files | You have train/val chat files and want assistant behavior |
+| `Run Benchmark` | Run a repeatable local comparison pass | You want to compare runs more consistently |
+| `Auto Tune Next Run` | Suggest next-run settings from recent benchmark history | You want a guided next step instead of guessing |
+| `Launch Chat RL` | Run advanced RL-style tuning on top of SFT | SFT already works and you are experimenting further |
+| `Run Chat Eval` | Evaluate the chat-stage checkpoint | You want a cleaner read on SFT or RL behavior |
+| `Pause Job` | Stop a running resumable job at a safe point | You need to stop without losing all progress |
+| `Resume Job` | Continue from the latest saved checkpoint | You paused a base, SFT, or RL job earlier |
+| `Copy Resume To Form` | Prefill the matching form with resume settings | You want to inspect or adjust resume values manually |
+| `Use Checkpoint In Eval/Load` | Copy checkpoint details into eval/load controls | You want to test a specific run's checkpoint |
+| `Load Chat Model` | Load an internal nanochat checkpoint into the chat bench | You want to test your trained model directly |
+| `Start Local Runtime` | Start the bundled GGUF helper runtime | You want the helper assistant available |
+| `Stop Local Runtime` | Stop the helper runtime process | You want to free resources or restart cleanly |
+| `Apply Cockpit To Bench` | Sync cockpit settings into the testing surfaces | You changed backend or sampling controls |
+| `Activate Backend Profile` | Switch the active backend/model lane | You want to route testing to a different model source |
+| `Reset Saved Controls` | Clear saved preferences and restore sane defaults | The dashboard controls feel messy or confusing |
+| `Run Quick Prompt` | Send one prompt and get one reply | You want the fastest smoke test |
+| `Copy To Conversation Lab` | Move a quick prompt into the longer chat area | A one-shot test is worth expanding |
+| `Send In Conversation Lab` | Send a full chat turn to the selected provider | You want help, drafting, or deeper testing |
+| `Save File / Load File / Delete File` | Manage sandbox or corpus files in place | You want to work with local files from the dashboard |
+| `Save Last Assistant Reply` | Turn the last assistant answer into a sandbox file | The reply is worth keeping or editing |
+| `Copy Sandbox To Corpus` | Move a reviewed draft from sandbox into corpus | A draft is ready to become training data |
+
+### Fit To Hardware
+
+This function checks the machine you are running on and fills the forms with safer starter values.
+
+Use it when:
+
+- you are new
+- you changed machines
+- you are unsure whether the current settings are too heavy
+
+Plain English:
+
+- it is the dashboard's `please do not let me accidentally bully my hardware` button
+
+### Save Design
+
+This saves the current assistant identity blueprint without making it the active published identity file yet.
+
+Use it when:
+
+- you want to keep a draft
+- you want to come back later
+- you want the design tray to remember this version
+
+Plain English:
+
+- it saves the assistant idea
+- it does not yet make that idea the active training identity
+
+### Publish As Active Identity File
+
+This takes the current design and writes the generated identity conversations into the active identity JSONL file used by the training flow.
+
+Use it when:
+
+- you are happy with the current assistant design
+- you want Stage 3 Chat SFT to use that identity
+
+Plain English:
+
+- this is the step that turns the design into a real file the trainer can use
+
+### Draft With GGUF
+
+This asks the helper GGUF model to draft an assistant design and starter settings from a plain-language goal.
+
+Use it when:
+
+- you know the outcome you want
+- you do not want to write every identity field from scratch
+
+Plain English:
+
+- you describe the assistant in normal language
+- the helper drafts a first version for you to review and edit
+
+### Train Tokenizer
+
+This starts tokenizer training from the local corpus.
+
+Use it when:
+
+- you have real corpus files in place
+- you want to begin the actual training pipeline
+
+Plain English:
+
+- it teaches the system how to break your text into tokens before model training happens
+
+### Run Tokenizer Eval
+
+This checks the tokenizer quality on a sample of your corpus.
+
+Use it when:
+
+- you want a quick compression sanity check
+- you are comparing tokenizer settings
+
+Plain English:
+
+- it tells you whether the tokenizer looks reasonable before you invest more work downstream
+
+### Launch Base Training
+
+This starts training the underlying language model from the local corpus.
+
+Use it when:
+
+- the tokenizer is ready
+- you want to build the base model stage
+
+Plain English:
+
+- this is the step where the model starts learning from the general reading pile
+
+### Run Base Eval
+
+This runs a quick evaluation and sampling pass against the current base checkpoint.
+
+Use it when:
+
+- you want to see whether the base run is obviously broken
+- you want a repeatable local quality check
+
+Plain English:
+
+- it is a smoke test for the base model
+
+### Launch Chat SFT
+
+This starts supervised fine-tuning on your local chat JSONL files.
+
+Use it when:
+
+- the base stage exists
+- you have `chat_train.jsonl` and `chat_val.jsonl`
+- you want the model to behave like an assistant instead of just a base language model
+
+Plain English:
+
+- this is where the model learns the chat behavior and identity you actually care about
+
+### Run Benchmark
+
+This runs the saved local benchmark flow so you can compare runs more consistently.
+
+Use it when:
+
+- you want a more stable comparison than casual chatting
+- you are iterating and need a repeatable reference point
+
+Plain English:
+
+- it helps you compare runs with less guesswork
+
+### Auto Tune Next Run
+
+This looks at recent benchmark history and suggests settings for the next run.
+
+Use it when:
+
+- you already have a few runs behind you
+- you want help nudging settings instead of guessing from zero
+
+Plain English:
+
+- it is the dashboard's `based on what we already saw, try this next` helper
+
+### Launch Chat RL
+
+This starts reinforcement-learning-style chat tuning on top of an SFT checkpoint.
+
+Use it when:
+
+- SFT is already working
+- you are deliberately experimenting beyond the supervised baseline
+
+Plain English:
+
+- this is the more advanced tuning lane, not the beginner starting point
+
+### Run Chat Eval
+
+This evaluates the chat-stage model against task-style checks.
+
+Use it when:
+
+- you want a cleaner read on the chat checkpoint
+- you want to compare SFT and RL outputs more consistently
+
+Plain English:
+
+- it is the report card for the chat model stage
+
+### Pause Job
+
+This asks a running train job to stop at the next safe point so it can later continue from the latest saved checkpoint.
+
+Use it when:
+
+- you need the machine back
+- the run is taking longer than expected
+- you want to stop without throwing away all progress
+
+Plain English:
+
+- it means `stop as safely as you can and leave me somewhere resumable`
+
+### Resume Job
+
+This launches a continuation run from the latest saved checkpoint for a paused or stopped resumable job.
+
+Use it when:
+
+- you previously paused a base, SFT, or RL run
+- a checkpoint exists
+
+Plain English:
+
+- it picks the run back up from where the last usable checkpoint left off
+
+### Copy Resume To Form
+
+This copies resume-related values from a selected job back into the matching form.
+
+Use it when:
+
+- you want to inspect or adjust the resume settings manually before relaunching
+
+Plain English:
+
+- it pre-fills the form so you do not have to reconstruct resume settings by hand
+
+### Use Checkpoint In Eval/Load
+
+This copies the selected job's checkpoint details into the evaluation or model-load controls.
+
+Use it when:
+
+- you want to test a specific checkpoint
+- you do not want to type the tag and step manually
+
+Plain English:
+
+- it is a shortcut for `use this run's checkpoint over there`
+
+### Load Chat Model
+
+This loads an internal nanochat SFT or RL checkpoint into the chat runtime for direct testing.
+
+Use it when:
+
+- you want to test the trained internal model instead of only the helper GGUF
+
+Plain English:
+
+- it puts your own trained model into the chat bench
+
+### Start Local Runtime
+
+This starts the bundled local `llama.cpp` server for the GGUF helper assistant.
+
+Use it when:
+
+- you want the helper assistant available
+- you want to use Quick Prompt or Conversation Lab against the GGUF path
+
+Plain English:
+
+- it turns on the local helper model service
+
+### Stop Local Runtime
+
+This stops the helper GGUF runtime process.
+
+Use it when:
+
+- you want to free hardware resources
+- the runtime is misbehaving
+- you want to restart cleanly
+
+Plain English:
+
+- it shuts the helper assistant service down
+
+### Apply Cockpit To Bench
+
+This copies the cockpit sampling and backend settings into the quick prompt and conversation bench controls.
+
+Use it when:
+
+- you changed temperature, max tokens, backend profile, or action mode in the cockpit
+- you want the testing tools to use those same settings
+
+Plain English:
+
+- it syncs the operator controls into the places where you actually chat
+
+### Activate Backend Profile
+
+This switches the active helper/testing backend profile according to the cockpit selection.
+
+Use it when:
+
+- you want to route tests through local runtime, current internal chat, latest SFT, or latest RL
+
+Plain English:
+
+- it tells the dashboard which model lane you want to use right now
+
+### Reset Saved Controls
+
+This clears stored cockpit and runtime preferences and restores safer defaults.
+
+Use it when:
+
+- the controls feel messy
+- an old experiment left confusing saved settings behind
+
+Plain English:
+
+- it is the `put the dashboard back into a sane state` button
+
+### Run Quick Prompt
+
+This sends one prompt and gets one reply back without building up a conversation history.
+
+Use it when:
+
+- you want a fast smoke test
+- you want to compare a single answer before doing a longer chat
+
+Plain English:
+
+- it is the fastest way to ask `does this model answer at all, and does it sound sane?`
+
+### Copy To Conversation Lab
+
+This moves the current quick prompt content into the longer chat area.
+
+Use it when:
+
+- a one-shot test is worth expanding into a fuller conversation
+
+Plain English:
+
+- it promotes a quick experiment into a longer test
+
+### Send In Conversation Lab
+
+This sends your message to the selected chat provider with the current assistant settings and optional file context.
+
+Use it when:
+
+- you want the helper assistant to review state, explain tradeoffs, or draft local files
+
+Plain English:
+
+- this is the main `talk to the builder assistant` function
+
+### Save File / Load File / Delete File
+
+These functions in the sandbox and corpus editors do exactly what they sound like:
+
+- `Save File` writes the current editor content
+- `Load File` reads the selected file back into the editor
+- `Delete File` removes the selected file
+
+Use them when:
+
+- you want to manage local working files without leaving the dashboard
+
+Plain English:
+
+- they are the file-management buttons for the two local workspaces
+
+### Save Last Assistant Reply
+
+This saves the assistant's most recent reply into a sandbox file.
+
+Use it when:
+
+- the assistant drafted something worth keeping
+- you want to turn a reply into a file for later editing
+
+Plain English:
+
+- it captures a useful answer before it scrolls away
+
+### Copy Sandbox To Corpus
+
+This copies a reviewed sandbox file into the local corpus area.
+
+Use it when:
+
+- you drafted something in the sandbox and now want it to become part of the corpus
+
+Plain English:
+
+- it is the bridge from `draft workspace` to `training data workspace`
 
 ## Understanding the Training Data Types
 
