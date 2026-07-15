@@ -30,6 +30,10 @@ If you want the short version:
 5. Put a small real corpus in `nanochat-master/local_corpus/`.
 6. Launch the dashboard and follow the guided builder flow.
 
+## Related Docs
+
+- [GLOSSARY.md](GLOSSARY.md)
+
 ## What This Repo Does
 
 This repo packages the local builder dashboard from the nested `nanochat-master/` app and adds a lightweight ChattyCog hosting layer. The ChattyCog wrapper only adds:
