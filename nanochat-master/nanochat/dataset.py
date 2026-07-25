@@ -8,6 +8,7 @@ data only. No download path lives here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -185,7 +186,8 @@ def _iter_parquet_documents(path: Path) -> Iterator[str]:
     if pq is None:
         raise RuntimeError(
             f"Parquet support requires pyarrow, but it is not installed. "
-            f"Convert {path.name} to text/JSONL or install pyarrow locally."
+            f"Install it with `uv sync --extra parquet` from nanochat-master, "
+            f"or convert {path.name} to text/JSONL."
         )
     parquet_file = pq.ParquetFile(path)
     for row_group_index in range(parquet_file.num_row_groups):
@@ -262,6 +264,120 @@ def corpus_summary(data_dir: str | os.PathLike[str] | None = None) -> dict[str, 
         "corpus_dir": str(corpus_dir),
         "exists": corpus_dir.exists(),
         "splits": splits,
+    }
+
+
+def inspect_local_corpus(
+    split: str = "train",
+    data_dir: str | os.PathLike[str] | None = None,
+    show_docs: int = 3,
+    max_chars: int = 240,
+    long_doc_chars: int = 8000,
+) -> dict[str, Any]:
+    if split not in {"train", "val"}:
+        raise ValueError("split must be 'train' or 'val'.")
+    if show_docs < 0:
+        raise ValueError("show_docs must be 0 or greater.")
+    if max_chars < 1:
+        raise ValueError("max_chars must be 1 or greater.")
+    if long_doc_chars < 1:
+        raise ValueError("long_doc_chars must be 1 or greater.")
+
+    corpus_dir = get_local_corpus_dir(data_dir)
+    summary = corpus_summary(data_dir=corpus_dir)
+    files = list_local_data_files(split=split, data_dir=corpus_dir)
+    documents = []
+    document_count = 0
+    character_count = 0
+    file_type_counts: dict[str, int] = {}
+    per_file = []
+    seen_hashes: dict[str, int] = {}
+    duplicate_count = 0
+    very_long_document_count = 0
+    very_long_documents = []
+    longest_documents = []
+    for path in files:
+        suffix = path.suffix.lower() or "<none>"
+        file_type_counts[suffix] = file_type_counts.get(suffix, 0) + 1
+        file_document_count = 0
+        file_character_count = 0
+        try:
+            for document in iter_documents_from_path(path):
+                text = str(document or "").strip()
+                if not text:
+                    continue
+                doc_chars = len(text)
+                doc_index = document_count
+                document_count += 1
+                character_count += doc_chars
+                file_document_count += 1
+                file_character_count += doc_chars
+                digest = hashlib.sha1(" ".join(text.split()).encode("utf-8")).hexdigest()
+                if digest in seen_hashes:
+                    duplicate_count += 1
+                else:
+                    seen_hashes[digest] = doc_index
+                doc_info = {
+                    "index": doc_index,
+                    "path": str(path),
+                    "character_count": doc_chars,
+                    "text": text[:max_chars],
+                    "truncated": doc_chars > max_chars,
+                }
+                if len(documents) < show_docs:
+                    documents.append(doc_info)
+                longest_documents.append(doc_info)
+                longest_documents = sorted(longest_documents, key=lambda item: item["character_count"], reverse=True)[:5]
+                if doc_chars >= long_doc_chars:
+                    very_long_document_count += 1
+                    if len(very_long_documents) < 10:
+                        very_long_documents.append(doc_info)
+        except Exception as exc:
+            per_file.append(
+                {
+                    "path": str(path),
+                    "suffix": suffix,
+                    "document_count": file_document_count,
+                    "character_count": file_character_count,
+                    "error": str(exc),
+                }
+            )
+            continue
+        per_file.append(
+            {
+                "path": str(path),
+                "suffix": suffix,
+                "document_count": file_document_count,
+                "character_count": file_character_count,
+                "error": "",
+            }
+        )
+    split_summary = summary["splits"][split]
+    estimated_tokens = max(0, int((character_count + 3) // 4))
+    return {
+        "corpus_dir": str(corpus_dir),
+        "split": split,
+        "split_path": split_summary["path"],
+        "exists": summary["exists"],
+        "file_count": split_summary["file_count"],
+        "sample_files": split_summary["sample_files"],
+        "document_count": document_count,
+        "character_count": character_count,
+        "estimated_tokens": estimated_tokens,
+        "average_document_chars": round(character_count / document_count, 2) if document_count else 0,
+        "max_document_chars": longest_documents[0]["character_count"] if longest_documents else 0,
+        "duplicate_document_count": duplicate_count,
+        "unique_document_count": document_count - duplicate_count,
+        "file_type_counts": file_type_counts,
+        "per_file": per_file,
+        "long_doc_chars": long_doc_chars,
+        "very_long_document_count": very_long_document_count,
+        "very_long_documents": very_long_documents,
+        "longest_documents": longest_documents,
+        "shown_document_count": len(documents),
+        "max_chars": max_chars,
+        "documents": documents,
+        "summary": summary,
     }
 
 

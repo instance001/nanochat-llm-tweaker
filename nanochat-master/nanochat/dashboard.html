@@ -731,6 +731,31 @@
             white-space: pre-wrap;
         }
 
+        .message.selected {
+            box-shadow: 0 0 0 2px rgba(15, 109, 106, 0.3);
+        }
+
+        .message-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .message-head .message-role {
+            margin-bottom: 0;
+        }
+
+        .message-select {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }
+
         .message.user {
             background: rgba(182, 75, 51, 0.12);
             border-color: rgba(182, 75, 51, 0.16);
@@ -930,6 +955,7 @@
                         </div>
                     </div>
                     <div class="footer-note" id="checkpointSummary"></div>
+                    <div class="note-box" id="readinessChecklist" style="margin-top: 12px;">Readiness checklist will appear here.</div>
                 </div>
             </div>
 
@@ -949,6 +975,24 @@
                         </div>
                     </div>
                     <div class="note-box" id="hardwareSummary" style="margin-bottom: 12px;">Hardware-aware sizing will appear here after the dashboard loads.</div>
+                    <div class="note-box" id="runProfileBox" style="margin-bottom: 12px;">
+                        <div><strong>Run Profile</strong></div>
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="runProfileSelect">Profile</label>
+                                <select id="runProfileSelect"></select>
+                            </div>
+                            <div class="field">
+                                <label for="customRunProfileName">Custom Name</label>
+                                <input id="customRunProfileName" type="text" placeholder="My local profile">
+                            </div>
+                        </div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="applyRunProfileBtn">Apply Run Profile</button>
+                            <button class="btn ghost" id="saveRunProfileBtn">Save Current Forms</button>
+                        </div>
+                        <div class="footer-note" id="runProfileMeta">Named run-size profiles fill training, eval, and runtime forms without changing the assistant design.</div>
+                    </div>
                     <div class="ecg-window" id="ecgWindow">ECG window will appear here after the dashboard loads.</div>
                     <div id="presetList" class="preset-list"></div>
                 </div>
@@ -1051,6 +1095,7 @@
                             <div style="margin-top: 8px;"><strong>Local Corpus:</strong> <span id="pathDataset"></span></div>
                             <div style="margin-top: 8px;"><strong>Assistant Sandbox:</strong> <span id="pathSandbox"></span></div>
                         </div>
+                        <div class="note-box" id="pathResolutionBox" style="margin-top: 12px;">Path resolution hints will appear here after the dashboard loads.</div>
                         <details class="fmi-about-panel">
                             <summary>About Fractal Media Infrastructure</summary>
                             <div class="fmi-about-copy">
@@ -1103,6 +1148,7 @@
 
                     <div class="button-row">
                         <button class="btn primary" data-job="tokenizer_train" data-form="tokenizerForm">Train Tokenizer</button>
+                        <button class="btn secondary" data-preview-job="tokenizer_train" data-form="tokenizerForm">Preview Command</button>
                         <button class="btn ghost" data-job="tokenizer_eval" data-form="tokenizerForm">Run Tokenizer Eval</button>
                     </div>
                 </div>
@@ -1272,6 +1318,7 @@
 
                     <div class="button-row">
                         <button class="btn primary" data-job="base_train" data-form="baseTrainForm">Launch Base Training</button>
+                        <button class="btn secondary" data-preview-job="base_train" data-form="baseTrainForm">Preview Command</button>
                         <button class="btn secondary" data-job="base_eval" data-form="baseEvalForm">Run Base Eval</button>
                     </div>
                     <div class="note-box" id="baseCheckpointInfo" style="margin-top: 12px;">Base checkpoint guidance will appear here after the dashboard loads.</div>
@@ -1415,6 +1462,7 @@
 
                     <div class="button-row">
                         <button class="btn primary" data-job="chat_sft" data-form="chatSftForm">Launch Chat SFT</button>
+                        <button class="btn secondary" data-preview-job="chat_sft" data-form="chatSftForm">Preview Command</button>
                     </div>
                     <div class="note-box" id="sftCheckpointInfo" style="margin-top: 12px;">SFT checkpoint guidance will appear here after the dashboard loads.</div>
                 </div>
@@ -1474,7 +1522,9 @@
 
                     <div class="button-row">
                         <button class="btn secondary" data-job="base_eval" data-form="baseEvalForm">Run Base Eval</button>
+                        <button class="btn secondary" data-preview-job="base_eval" data-form="baseEvalForm">Preview Base Eval Command</button>
                         <button class="btn primary" data-job="benchmark_eval" data-form="baseEvalForm">Run Benchmark</button>
+                        <button class="btn ghost" data-preview-job="benchmark_eval" data-form="baseEvalForm">Preview Benchmark Command</button>
                         <button class="btn ghost" id="autoTuneBtn">Auto Tune Next Run</button>
                     </div>
                     <div class="note-box" id="benchmarkSummary" style="margin-top: 12px;">No benchmark history yet. Run a benchmark after a training pass to compare outcomes.</div>
@@ -1585,6 +1635,7 @@
 
                     <div class="button-row">
                         <button class="btn primary" data-job="chat_rl" data-form="chatRlForm">Launch Chat RL</button>
+                        <button class="btn secondary" data-preview-job="chat_rl" data-form="chatRlForm">Preview Command</button>
                     </div>
                     <div class="note-box" id="rlCheckpointInfo" style="margin-top: 12px;">RL checkpoint guidance will appear here after the dashboard loads.</div>
                 </div>
@@ -1659,6 +1710,7 @@
 
                     <div class="button-row">
                         <button class="btn secondary" data-job="chat_eval" data-form="chatEvalForm">Run Chat Eval</button>
+                        <button class="btn ghost" data-preview-job="chat_eval" data-form="chatEvalForm">Preview Command</button>
                     </div>
                 </div>
             </div>
@@ -1691,11 +1743,27 @@
                             <button class="btn ghost" id="resumeJobBtn">Resume Job</button>
                             <button class="btn ghost" id="copyResumeBtn">Copy Resume To Form</button>
                             <button class="btn ghost" id="useCheckpointBtn">Use Checkpoint In Eval/Load</button>
+                            <button class="btn ghost" id="copyCommandBtn">Copy Command</button>
                             <button class="btn signal" id="stopJobBtn">Stop Job</button>
                         </div>
                     </div>
                     <div class="note-box" id="jobSummary">Select a job to inspect its command and logs.</div>
                     <div class="command-preview" id="jobCommandPreview" style="margin-top: 12px;">No job selected.</div>
+                    <div class="form-grid" style="margin-top: 12px;">
+                        <div class="field">
+                            <label for="jobLogFilter">Log Search</label>
+                            <input id="jobLogFilter" type="text" placeholder="error, checkpoint, oom, step...">
+                        </div>
+                        <div class="field">
+                            <label for="jobLogTailLines">Tail Lines</label>
+                            <input id="jobLogTailLines" type="number" min="1" max="500" value="80">
+                        </div>
+                    </div>
+                    <div class="button-row" style="margin-top: 12px;">
+                        <button class="btn secondary" id="clearJobLogFilterBtn">Clear Log Search</button>
+                        <button class="btn ghost" id="copyJobLogTailBtn">Copy Log Tail</button>
+                    </div>
+                    <div class="note-box" id="jobLogMeta" style="margin-top: 12px;">Log search metadata will appear here.</div>
                     <textarea id="jobLogs" class="log-box" readonly style="margin-top: 12px;"></textarea>
                 </div>
             </div>
@@ -1859,6 +1927,13 @@
                                 <option value="0">disabled</option>
                             </select>
                         </div>
+                        <div class="field">
+                            <label for="cockpitActionReview">Action Review</label>
+                            <select id="cockpitActionReview">
+                                <option value="review">review before writes/jobs</option>
+                                <option value="auto">auto-run allowed actions</option>
+                            </select>
+                        </div>
                         <div class="field full">
                             <label for="cockpitSystemPrompt">Cockpit Protocol / System Prompt</label>
                             <textarea id="cockpitSystemPrompt">You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.</textarea>
@@ -1947,6 +2022,13 @@
                                 <option value="0">disabled</option>
                             </select>
                         </div>
+                        <div class="field">
+                            <label for="assistantActionMode">Action Review</label>
+                            <select id="assistantActionMode">
+                                <option value="review">review writes/jobs</option>
+                                <option value="auto">auto-run</option>
+                            </select>
+                        </div>
                         <div class="field full">
                             <label for="runtimeSystemPrompt">Local Assistant System Prompt</label>
                             <textarea id="runtimeSystemPrompt">You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.</textarea>
@@ -1957,9 +2039,15 @@
 
                     <div class="chat-compose">
                         <textarea id="chatInput" placeholder="Ask the assistant to explain a tradeoff, admit uncertainty, draft SFT JSONL, or help create corpus files under local_corpus/train or local_corpus/val."></textarea>
+                        <div class="note-box" id="chatSelectionMeta">No selected turns. Transcript exports will use the full conversation.</div>
                         <div class="button-row">
                             <button class="btn primary" id="sendChatBtn">Send</button>
                             <button class="btn secondary" id="clearChatBtn">Clear</button>
+                            <button class="btn ghost" id="selectAllChatBtn">Select All Turns</button>
+                            <button class="btn ghost" id="clearChatSelectionBtn">Clear Selection</button>
+                            <button class="btn secondary" id="loadTranscriptBtn">Load Transcript</button>
+                            <button class="btn secondary" id="saveTranscriptBtn">Save Transcript</button>
+                            <button class="btn ghost" id="exportChatSftBtn">Export SFT JSONL</button>
                         </div>
                     </div>
                 </div>
@@ -2005,6 +2093,11 @@
                     <div class="button-row" style="margin-top: 12px;">
                         <button class="btn primary" id="saveSandboxBtn">Save File</button>
                         <button class="btn secondary" id="loadSandboxBtn">Load File</button>
+                        <button class="btn secondary" id="validateSftBtn">Validate SFT Dataset</button>
+                        <button class="btn secondary" id="previewSftExportBtn">Preview SFT Export</button>
+                        <button class="btn secondary" id="exportSftParquetBtn">Export SFT Parquet</button>
+                        <button class="btn ghost" id="normalizeSftJsonlBtn">Normalize SFT JSONL</button>
+                        <button class="btn ghost" id="splitSftJsonlBtn">Split SFT Train/Val</button>
                         <button class="btn signal" id="deleteSandboxBtn">Delete File</button>
                         <button class="btn ghost" id="saveReplyToSandboxBtn">Save Last Assistant Reply</button>
                     </div>
@@ -2047,14 +2140,96 @@
                         </div>
                     </div>
                     <div class="note-box" id="corpusMeta" style="margin-top: 12px;">Select a corpus file from the left or create a new one here.</div>
+                    <div class="note-box" style="margin-top: 12px;">
+                        <div><strong>Inspect Trainer Documents</strong></div>
+                        <div style="margin-top: 8px;">Preview the extracted documents using the same corpus reader as tokenizer and base training.</div>
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="corpusInspectSplit">Split</label>
+                                <select id="corpusInspectSplit">
+                                    <option value="train">train</option>
+                                    <option value="val">val</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="corpusInspectShowDocs">Show Docs</label>
+                                <input id="corpusInspectShowDocs" type="number" min="0" max="20" value="3">
+                            </div>
+                            <div class="field">
+                                <label for="corpusInspectMaxChars">Max Chars</label>
+                                <input id="corpusInspectMaxChars" type="number" min="40" max="2000" value="240">
+                            </div>
+                            <div class="field">
+                                <label for="corpusInspectLongDocChars">Long Doc Chars</label>
+                                <input id="corpusInspectLongDocChars" type="number" min="100" value="8000">
+                            </div>
+                        </div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="inspectCorpusBtn">Inspect Corpus Documents</button>
+                        </div>
+                    </div>
                     <textarea id="corpusEditor" class="log-box" style="margin-top: 12px;" placeholder="Draft local text, JSON, JSONL, or a JSON array of records for a new .parquet file here."></textarea>
                     <div class="note-box" style="margin-top: 12px;">
                         Parquet corpus files expect one JSON object per row. A JSON array of objects or JSONL object rows will work.
                         Files like chat datasets that store arrays per line are valid for SFT, but they are not valid corpus parquet rows.
                     </div>
+                    <div class="note-box" style="margin-top: 12px;">
+                        <div><strong>Create Parquet Corpus</strong></div>
+                        <div style="margin-top: 8px;">Use the current editor text to create a first-class corpus parquet file. This is for tokenizer/base corpus text, not chat SFT conversations.</div>
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="parquetConversionMode">Conversion Mode</label>
+                                <select id="parquetConversionMode">
+                                    <option value="paragraphs">one row per paragraph</option>
+                                    <option value="lines">one row per line</option>
+                                    <option value="markdown_sections">one row per markdown section</option>
+                                    <option value="jsonl">JSONL object rows</option>
+                                    <option value="json_array">JSON object / array</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="parquetConversionSource">Source Label</label>
+                                <input id="parquetConversionSource" type="text" value="dashboard">
+                            </div>
+                        </div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="previewParquetBtn">Preview Parquet Rows</button>
+                            <button class="btn primary" id="writeParquetBtn">Write Parquet Corpus</button>
+                        </div>
+                        <textarea id="parquetPreview" class="log-box" readonly style="margin-top: 12px; min-height: 140px;" placeholder="Parquet row preview appears here before writing."></textarea>
+                    </div>
+                    <div class="note-box" style="margin-top: 12px;">
+                        <div><strong>Create Train/Val Split</strong></div>
+                        <div style="margin-top: 8px;">Split the current editor content into deterministic corpus train and validation files.</div>
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="corpusSplitMode">Split Mode</label>
+                                <select id="corpusSplitMode">
+                                    <option value="paragraphs">paragraphs</option>
+                                    <option value="lines">lines</option>
+                                    <option value="markdown_sections">markdown sections</option>
+                                    <option value="jsonl">JSONL object rows</option>
+                                    <option value="json_array">JSON object / array</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="corpusSplitValRatio">Validation Ratio</label>
+                                <input id="corpusSplitValRatio" type="number" min="0.01" max="0.9" step="0.01" value="0.1">
+                            </div>
+                            <div class="field">
+                                <label for="corpusSplitSeed">Seed</label>
+                                <input id="corpusSplitSeed" type="number" value="1337">
+                            </div>
+                        </div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="previewCorpusSplitBtn">Preview Split</button>
+                            <button class="btn primary" id="writeCorpusSplitBtn">Write Train/Val Split</button>
+                        </div>
+                    </div>
                     <div class="button-row" style="margin-top: 12px;">
                         <button class="btn primary" id="saveCorpusBtn">Save File</button>
                         <button class="btn secondary" id="loadCorpusBtn">Load File</button>
+                        <button class="btn secondary" id="validateCorpusBtn">Validate Corpus</button>
                         <button class="btn signal" id="deleteCorpusBtn">Delete File</button>
                         <button class="btn ghost" id="copySandboxToCorpusBtn">Copy Sandbox To Corpus</button>
                     </div>
@@ -2080,12 +2255,33 @@
                 <textarea id="activityLog" class="log-box" readonly style="margin-top: 12px;"></textarea>
             </div>
         </section>
+
+        <section class="panel" style="margin-top: 18px;">
+            <div class="panel-inner">
+                <div class="section-head">
+                    <div>
+                        <div class="section-kicker">Report</div>
+                        <h2>Training Report</h2>
+                        <div class="section-copy">
+                            Generate or reset the markdown report assembled from tokenizer, training, and evaluation sections.
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn primary" id="generateReportBtn">Generate Report</button>
+                        <button class="btn signal" id="resetReportBtn">Reset Report</button>
+                    </div>
+                </div>
+                <div class="note-box" id="reportMeta">Report status will appear here.</div>
+                <textarea id="reportPreview" class="log-box" readonly style="margin-top: 12px;" placeholder="Generated report preview appears here."></textarea>
+            </div>
+        </section>
     </div>
 
     <script>
         const STARTUP_SPLASH_DURATION_MS = 3000;
         const COCKPIT_STORAGE_KEY = "llm_tweaker_cockpit_settings_v1";
         const RUNTIME_FORM_STORAGE_KEY = "llm_tweaker_runtime_form_v1";
+        const CUSTOM_RUN_PROFILES_KEY = "llm_tweaker_custom_run_profiles_v1";
         const state = {
             bootstrap: null,
             ecg: null,
@@ -2094,9 +2290,13 @@
             lastAppliedDesignSlug: null,
             selectedJobId: null,
             selectedJob: null,
+            currentCommandPreview: "",
+            currentJobLogLines: [],
             selectedSandboxPath: "",
             selectedCorpusPath: "",
             chatMessages: [],
+            selectedChatMessageIds: [],
+            nextChatMessageId: 1,
             pollingHandle: null,
             ecgPollingHandle: null,
             isSendingChat: false,
@@ -2116,6 +2316,9 @@
         const noticeEl = document.getElementById("notice");
         const presetListEl = document.getElementById("presetList");
         const hardwareSummaryEl = document.getElementById("hardwareSummary");
+        const runProfileSelectEl = document.getElementById("runProfileSelect");
+        const customRunProfileNameEl = document.getElementById("customRunProfileName");
+        const runProfileMetaEl = document.getElementById("runProfileMeta");
         const ecgWindowEl = document.getElementById("ecgWindow");
         const baseCheckpointInfoEl = document.getElementById("baseCheckpointInfo");
         const sftCheckpointInfoEl = document.getElementById("sftCheckpointInfo");
@@ -2127,14 +2330,19 @@
         const jobSummaryEl = document.getElementById("jobSummary");
         const jobCommandPreviewEl = document.getElementById("jobCommandPreview");
         const jobLogsEl = document.getElementById("jobLogs");
+        const jobLogFilterEl = document.getElementById("jobLogFilter");
+        const jobLogTailLinesEl = document.getElementById("jobLogTailLines");
+        const jobLogMetaEl = document.getElementById("jobLogMeta");
         const chatMessagesEl = document.getElementById("chatMessages");
         const chatInputEl = document.getElementById("chatInput");
+        const chatSelectionMetaEl = document.getElementById("chatSelectionMeta");
         const chatStatusBoxEl = document.getElementById("chatStatusBox");
         const cockpitBackendProfileEl = document.getElementById("cockpitBackendProfile");
         const cockpitTemperatureEl = document.getElementById("cockpitTemperature");
         const cockpitTopKEl = document.getElementById("cockpitTopK");
         const cockpitMaxTokensEl = document.getElementById("cockpitMaxTokens");
         const cockpitAssistantActionsEl = document.getElementById("cockpitAssistantActions");
+        const cockpitActionReviewEl = document.getElementById("cockpitActionReview");
         const cockpitSystemPromptEl = document.getElementById("cockpitSystemPrompt");
         const cockpitStatusBoxEl = document.getElementById("cockpitStatusBox");
         const runtimeStatusBoxEl = document.getElementById("runtimeStatusBox");
@@ -2144,6 +2352,7 @@
         const runtimePreferredDeviceEl = document.getElementById("runtimePreferredDevice");
         const chatProviderEl = document.getElementById("chatProvider");
         const assistantToolsEnabledEl = document.getElementById("assistantToolsEnabled");
+        const assistantActionModeEl = document.getElementById("assistantActionMode");
         const runtimeSystemPromptEl = document.getElementById("runtimeSystemPrompt");
         const quickPromptProviderEl = document.getElementById("quickPromptProvider");
         const quickPromptTemperatureEl = document.getElementById("quickPromptTemperature");
@@ -2160,13 +2369,26 @@
         const corpusPathEl = document.getElementById("corpusPath");
         const corpusEditorEl = document.getElementById("corpusEditor");
         const corpusMetaEl = document.getElementById("corpusMeta");
+        const corpusInspectSplitEl = document.getElementById("corpusInspectSplit");
+        const corpusInspectShowDocsEl = document.getElementById("corpusInspectShowDocs");
+        const corpusInspectMaxCharsEl = document.getElementById("corpusInspectMaxChars");
+        const corpusInspectLongDocCharsEl = document.getElementById("corpusInspectLongDocChars");
+        const parquetConversionModeEl = document.getElementById("parquetConversionMode");
+        const parquetConversionSourceEl = document.getElementById("parquetConversionSource");
+        const parquetPreviewEl = document.getElementById("parquetPreview");
+        const corpusSplitModeEl = document.getElementById("corpusSplitMode");
+        const corpusSplitValRatioEl = document.getElementById("corpusSplitValRatio");
+        const corpusSplitSeedEl = document.getElementById("corpusSplitSeed");
         const benchmarkSummaryEl = document.getElementById("benchmarkSummary");
         const activityMetaEl = document.getElementById("activityMeta");
         const activityLogEl = document.getElementById("activityLog");
+        const reportMetaEl = document.getElementById("reportMeta");
+        const reportPreviewEl = document.getElementById("reportPreview");
         const pauseJobBtnEl = document.getElementById("pauseJobBtn");
         const resumeJobBtnEl = document.getElementById("resumeJobBtn");
         const copyResumeBtnEl = document.getElementById("copyResumeBtn");
         const useCheckpointBtnEl = document.getElementById("useCheckpointBtn");
+        const copyCommandBtnEl = document.getElementById("copyCommandBtn");
 
         function dismissStartupSplash() {
             if (startupSplashDismissed || !startupSplashEl) return;
@@ -2412,6 +2634,7 @@
                 baseEvalForm: cleanOptionalPayload(serializeForm("baseEvalForm")),
                 chatRlForm: cleanOptionalPayload(serializeForm("chatRlForm")),
                 chatEvalForm: cleanOptionalPayload(serializeForm("chatEvalForm")),
+                runtimeForm: cleanOptionalPayload(serializeForm("runtimeForm")),
             };
         }
 
@@ -2426,6 +2649,79 @@
             if (recommendedForms.chatRlForm) fillForm("chatRlForm", recommendedForms.chatRlForm);
             if (recommendedForms.chatEvalForm) fillForm("chatEvalForm", recommendedForms.chatEvalForm);
             if (recommendedForms.runtimeForm) fillForm("runtimeForm", recommendedForms.runtimeForm);
+        }
+
+        function loadCustomRunProfiles() {
+            try {
+                const raw = window.localStorage.getItem(CUSTOM_RUN_PROFILES_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return parsed && typeof parsed === "object" ? parsed : {};
+            } catch (error) {
+                console.warn("Unable to load custom run profiles", error);
+                return {};
+            }
+        }
+
+        function saveCustomRunProfiles(profiles) {
+            try {
+                window.localStorage.setItem(CUSTOM_RUN_PROFILES_KEY, JSON.stringify(profiles));
+            } catch (error) {
+                console.warn("Unable to save custom run profiles", error);
+            }
+        }
+
+        function allRunProfiles() {
+            const builtIns = state.bootstrap && state.bootstrap.builder ? state.bootstrap.builder.run_profiles || {} : {};
+            return { ...builtIns, ...loadCustomRunProfiles() };
+        }
+
+        function renderRunProfiles() {
+            const profiles = allRunProfiles();
+            runProfileSelectEl.innerHTML = "";
+            Object.entries(profiles).forEach(([key, profile]) => {
+                const option = document.createElement("option");
+                option.value = key;
+                option.textContent = profile.label || key;
+                runProfileSelectEl.appendChild(option);
+            });
+            const selected = profiles[runProfileSelectEl.value] || Object.values(profiles)[0];
+            runProfileMetaEl.textContent = selected
+                ? selected.summary || "Apply this profile to the training, eval, and runtime forms."
+                : "No run profiles are available yet.";
+        }
+
+        function applyRunProfile() {
+            const profiles = allRunProfiles();
+            const profile = profiles[runProfileSelectEl.value];
+            if (!profile) {
+                showNotice("Select a run profile first.", "bad");
+                return;
+            }
+            applyRecommendedForms(profile.forms || {});
+            saveRuntimeFormSettings();
+            renderHardwareSummary(state.bootstrap.builder);
+            runProfileMetaEl.textContent = profile.summary || "Run profile applied.";
+            showNotice(`Applied run profile: ${profile.label || runProfileSelectEl.value}`, "good");
+        }
+
+        function saveCurrentRunProfile() {
+            const name = customRunProfileNameEl.value.trim();
+            if (!name) {
+                showNotice("Name the custom run profile first.", "bad");
+                return;
+            }
+            const key = `custom_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "profile"}`;
+            const profiles = loadCustomRunProfiles();
+            profiles[key] = {
+                label: name,
+                summary: "Custom profile saved from the current dashboard forms.",
+                forms: currentFormsSnapshot(),
+            };
+            saveCustomRunProfiles(profiles);
+            renderRunProfiles();
+            runProfileSelectEl.value = key;
+            runProfileMetaEl.textContent = profiles[key].summary;
+            showNotice(`Saved run profile: ${name}`, "good");
         }
 
         function renderHardwareSummary(builder) {
@@ -2613,6 +2909,7 @@
                 topK: Number(cockpitTopKEl.value || 40),
                 maxTokens: Number(cockpitMaxTokensEl.value || 512),
                 assistantActions: cockpitAssistantActionsEl.value,
+                actionReview: cockpitActionReviewEl.value,
                 systemPrompt: cockpitSystemPromptEl.value.trim(),
             };
         }
@@ -2637,6 +2934,7 @@
                 if (saved.topK !== undefined && saved.topK !== null) cockpitTopKEl.value = String(saved.topK);
                 if (saved.maxTokens !== undefined && saved.maxTokens !== null) cockpitMaxTokensEl.value = String(saved.maxTokens);
                 if (typeof saved.assistantActions === "string") cockpitAssistantActionsEl.value = saved.assistantActions;
+                if (typeof saved.actionReview === "string") cockpitActionReviewEl.value = saved.actionReview;
                 if (typeof saved.systemPrompt === "string") cockpitSystemPromptEl.value = saved.systemPrompt;
             } catch (error) {
                 console.warn("Unable to load cockpit settings", error);
@@ -2657,6 +2955,7 @@
             cockpitTopKEl.value = "40";
             cockpitMaxTokensEl.value = "512";
             cockpitAssistantActionsEl.value = "1";
+            cockpitActionReviewEl.value = "review";
             cockpitSystemPromptEl.value = "You are the local builder assistant for this dashboard. Help the user run the LLM builder, explain which step should happen next, point out missing files or settings, and prefer practical, accurate guidance over speed. If you are unsure, say so plainly. When workspace files are included, use only that context. The writable local workspaces exposed through the dashboard are assistant_sandbox and local_corpus.";
         }
 
@@ -2825,7 +3124,7 @@
                 <div><strong>Profile:</strong> ${escapeHtml(settings.profile)}</div>
                 <div style="margin-top: 8px;"><strong>Effective backend:</strong> ${escapeHtml(profile.backendLabel)} | ${escapeHtml(profile.targetLabel)}${profile.ctxSize ? ` | ctx ${escapeHtml(String(profile.ctxSize))}` : ""}</div>
                 <div style="margin-top: 8px;"><strong>Sampling:</strong> temp ${escapeHtml(String(settings.temperature))} | top-k ${escapeHtml(String(settings.topK))} | max tokens ${escapeHtml(String(settings.maxTokens))}</div>
-                <div style="margin-top: 8px;"><strong>Bench routing:</strong> chat ${escapeHtml(chatProviderEl.value)} | quick prompt ${escapeHtml(quickPromptProviderEl.value)} | actions ${escapeHtml(assistantToolsEnabledEl.value === "1" ? "enabled" : "disabled")}</div>
+                <div style="margin-top: 8px;"><strong>Bench routing:</strong> chat ${escapeHtml(chatProviderEl.value)} | quick prompt ${escapeHtml(quickPromptProviderEl.value)} | actions ${escapeHtml(assistantToolsEnabledEl.value === "1" ? "enabled" : "disabled")} | review ${escapeHtml(assistantActionModeEl.value)}</div>
                 <div style="margin-top: 8px;"><strong>Context estimate:</strong> chat ${escapeHtml(chatPressureText)} | quick prompt ${escapeHtml(quickPressureText)}</div>
                 <div style="margin-top: 8px;"><strong>Last turn:</strong> ${escapeHtml(telemetryText)}</div>
             `;
@@ -2839,6 +3138,7 @@
         function applyCockpitSettings(options = {}) {
             const settings = getCockpitSettings();
             assistantToolsEnabledEl.value = settings.assistantActions;
+            assistantActionModeEl.value = settings.actionReview;
             runtimeSystemPromptEl.value = settings.systemPrompt;
             quickPromptTemperatureEl.value = String(settings.temperature);
             quickPromptTopKEl.value = String(settings.topK);
@@ -3068,11 +3368,14 @@
             if (!job) {
                 jobSummaryEl.textContent = "Select a job to inspect its command and logs.";
                 jobCommandPreviewEl.textContent = "No job selected.";
-                jobLogsEl.value = "";
+                state.currentCommandPreview = "";
+                state.currentJobLogLines = [];
+                renderJobLogs();
                 pauseJobBtnEl.disabled = true;
                 resumeJobBtnEl.disabled = true;
                 copyResumeBtnEl.disabled = true;
                 useCheckpointBtnEl.disabled = true;
+                copyCommandBtnEl.disabled = true;
                 return;
             }
             const summary = [
@@ -3090,7 +3393,7 @@
                 if (job.metrics.avg_bytes_per_token !== undefined) metricParts.push(`avg bytes/token ${Number(job.metrics.avg_bytes_per_token).toFixed(2)}`);
                 if (job.metrics.oom_detected) metricParts.push("OOM detected");
             }
-            const friendlyFailure = classifyJobFailure(job);
+            const friendlyFailure = job.failure_diagnosis || classifyJobFailure(job);
             const summaryLines = [escapeHtml(summary)];
             if (metricParts.length) {
                 summaryLines.push(escapeHtml(metricParts.join(" | ")));
@@ -3123,16 +3426,68 @@
             if (friendlyFailure) {
                 summaryLines.push(`<strong>Likely issue:</strong> ${escapeHtml(friendlyFailure.title)}`);
                 summaryLines.push(`<strong>Why it failed:</strong> ${escapeHtml(friendlyFailure.detail)}`);
-                summaryLines.push(`<strong>Suggested next step:</strong> ${escapeHtml(friendlyFailure.nextStep)}`);
+                summaryLines.push(`<strong>Suggested next step:</strong> ${escapeHtml(friendlyFailure.next_step || friendlyFailure.nextStep)}`);
+                if (friendlyFailure.evidence && friendlyFailure.evidence.length) {
+                    summaryLines.push(`<strong>Evidence:</strong> ${escapeHtml(friendlyFailure.evidence.join(" | "))}`);
+                }
             }
             jobSummaryEl.innerHTML = summaryLines.map((line) => `<div>${line}</div>`).join("");
-            jobCommandPreviewEl.textContent = job.display_command || "No command recorded.";
-            jobLogsEl.value = (job.logs || []).join("\n");
-            jobLogsEl.scrollTop = jobLogsEl.scrollHeight;
+            state.currentCommandPreview = job.display_command || "";
+            jobCommandPreviewEl.textContent = state.currentCommandPreview || "No command recorded.";
+            state.currentJobLogLines = job.logs || [];
+            renderJobLogs();
             pauseJobBtnEl.disabled = !job.can_pause;
             resumeJobBtnEl.disabled = !job.can_resume;
             copyResumeBtnEl.disabled = !["base_train", "chat_sft", "chat_rl"].includes(job.job_type) || !job.latest_checkpoint_step;
             useCheckpointBtnEl.disabled = !["base_train", "chat_sft", "chat_rl"].includes(job.job_type) || !job.latest_checkpoint_step;
+            copyCommandBtnEl.disabled = !state.currentCommandPreview;
+        }
+
+        function renderJobLogs() {
+            const query = (jobLogFilterEl.value || "").trim().toLowerCase();
+            const allLines = state.currentJobLogLines || [];
+            const displayed = query ? allLines.filter((line) => String(line).toLowerCase().includes(query)) : allLines;
+            jobLogsEl.value = displayed.join("\n");
+            jobLogsEl.scrollTop = jobLogsEl.scrollHeight;
+            if (!allLines.length) {
+                jobLogMetaEl.textContent = "No logs loaded.";
+            } else if (query) {
+                jobLogMetaEl.textContent = `Showing ${displayed.length} of ${allLines.length} log line(s) matching "${query}".`;
+            } else {
+                jobLogMetaEl.textContent = `Showing all ${allLines.length} log line(s).`;
+            }
+        }
+
+        async function copyJobLogTail() {
+            const tailLines = Number.parseInt(jobLogTailLinesEl.value || "80", 10);
+            if (!Number.isFinite(tailLines) || tailLines < 1) {
+                showNotice("Enter a valid number of tail lines.", "bad");
+                return;
+            }
+            const lines = (jobLogsEl.value || "").split(/\r?\n/).filter((line) => line.length);
+            const tail = lines.slice(-tailLines).join("\n");
+            if (!tail) {
+                showNotice("No log lines are available to copy.", "bad");
+                return;
+            }
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(tail);
+                } else {
+                    const textarea = document.createElement("textarea");
+                    textarea.value = tail;
+                    textarea.setAttribute("readonly", "readonly");
+                    textarea.style.position = "fixed";
+                    textarea.style.left = "-9999px";
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(textarea);
+                }
+                showNotice(`Copied ${Math.min(tailLines, lines.length)} log line(s).`, "good");
+            } catch (error) {
+                showNotice(`Could not copy log tail: ${error.message}`, "bad");
+            }
         }
 
         function applySelectedJobToForms(mode = "resume") {
@@ -3271,6 +3626,73 @@
             activityLogEl.scrollTop = activityLogEl.scrollHeight;
         }
 
+        function renderReportStatus(report) {
+            if (!report) return;
+            const ready = `${report.ready_sections || 0}/${report.expected_sections || 0}`;
+            reportMetaEl.innerHTML = [
+                `<div><strong>Report:</strong> ${report.report_exists ? "generated" : "not generated yet"}</div>`,
+                `<div style="margin-top: 8px;"><strong>Report file:</strong> ${escapeHtml(report.report_file || "")}</div>`,
+                `<div style="margin-top: 8px;"><strong>Ready sections:</strong> ${escapeHtml(ready)}</div>`,
+                `<div style="margin-top: 8px;"><strong>Repo copy:</strong> ${report.root_copy_exists ? escapeHtml(report.root_copy || "") : "not present"}</div>`,
+            ].join("");
+            reportPreviewEl.value = report.preview || "";
+        }
+
+        function readinessChipClass(status) {
+            if (status === "ready") return "good";
+            if (status === "blocker" || status === "warning") return "warn";
+            return "";
+        }
+
+        function renderReadiness(readiness) {
+            const checklistEl = document.getElementById("readinessChecklist");
+            if (!checklistEl) return;
+            if (!readiness || !readiness.checks) {
+                checklistEl.textContent = "Readiness checklist is not available yet.";
+                return;
+            }
+            const header = [
+                `<div><strong>First-Run Readiness:</strong> ${escapeHtml(readiness.status || "unknown")} | ${escapeHtml(String(readiness.ready_count || 0))}/${escapeHtml(String(readiness.check_count || 0))} ready | ${escapeHtml(String(readiness.blocker_count || 0))} blocker(s) | ${escapeHtml(String(readiness.warning_count || 0))} warning(s)</div>`,
+                readiness.next_step ? `<div style="margin-top: 8px;"><strong>Next:</strong> ${escapeHtml(readiness.next_step)}</div>` : "",
+            ].join("");
+            const rows = readiness.checks.map((check) => `
+                <div style="margin-top: 10px;">
+                    <span class="chip ${readinessChipClass(check.status)}">${escapeHtml(check.status)}</span>
+                    <strong>${escapeHtml(check.label || check.code)}</strong>
+                    <span>${escapeHtml(check.message || "")}</span>
+                    ${check.detail ? `<div class="footer-note">${escapeHtml(check.detail)}</div>` : ""}
+                </div>
+            `);
+            checklistEl.innerHTML = [header, ...rows].join("");
+        }
+
+        async function generateReport() {
+            try {
+                const status = await api("/api/report/generate", { method: "POST", body: {} });
+                renderReportStatus(status);
+                showNotice(status.report_exists ? "Report generated." : "Report generation completed without a report file.", status.report_exists ? "good" : "warn");
+                await refreshBootstrap();
+            } catch (error) {
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function resetReport() {
+            const shouldReset = window.confirm("Reset the report sections and write a fresh header? Existing report section files will be removed.");
+            if (!shouldReset) {
+                showNotice("Report reset cancelled.", "warn");
+                return;
+            }
+            try {
+                const status = await api("/api/report/reset", { method: "POST", body: {} });
+                renderReportStatus(status);
+                showNotice("Report reset.", "good");
+                await refreshBootstrap();
+            } catch (error) {
+                showNotice(error.message, "bad");
+            }
+        }
+
         function renderSandbox(sandbox) {
             sandboxFilesEl.innerHTML = "";
             if (!sandbox || !sandbox.files || !sandbox.files.length) {
@@ -3286,15 +3708,25 @@
                 card.innerHTML = `
                     <div class="job-title">
                         <span>${file.path}</span>
-                        <span class="chip">${file.size} B</span>
+                        <span class="chip">${file.kind || "text"}</span>
                     </div>
                     <div class="job-meta">
                         <div>${new Date(file.updated_at * 1000).toLocaleString()}</div>
+                        <div>${file.kind === "parquet" ? `${file.row_count || 0} rows` : `${file.size} B`}</div>
                     </div>
                 `;
                 card.addEventListener("click", () => loadSandboxFile(file.path));
                 sandboxFilesEl.appendChild(card);
             });
+        }
+
+        function setSandboxEditorMode(mode) {
+            sandboxEditorEl.readOnly = mode === "parquet-preview";
+            if (mode === "parquet-preview") {
+                sandboxEditorEl.placeholder = "Sandbox parquet files are previewed here as sample rows. Use SFT export actions to create parquet files.";
+            } else {
+                sandboxEditorEl.placeholder = "Draft local JSONL, notes, prompts, or templates here.";
+            }
         }
 
         function renderCorpus(corpus) {
@@ -3373,7 +3805,18 @@
             state.selectedSandboxPath = file.path;
             sandboxPathEl.value = file.path;
             sandboxEditorEl.value = file.content || "";
-            sandboxMetaEl.textContent = `Loaded ${file.path} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            if (file.kind === "parquet") {
+                setSandboxEditorMode("parquet-preview");
+                sandboxMetaEl.textContent = [
+                    `Loaded ${file.path} | parquet | ${file.row_count || 0} rows | ${file.column_count || 0} columns`,
+                    `columns: ${(file.columns || []).join(", ") || "none"}`,
+                    `schema: ${formatParquetSchema(file.schema)}`,
+                ].join("\n");
+                showNotice("Loaded sandbox parquet preview. Use export actions to rewrite parquet files.", "warn");
+            } else {
+                setSandboxEditorMode("text");
+                sandboxMetaEl.textContent = `Loaded ${file.path} | ${file.kind || "text"} | ${file.size} bytes | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+            }
             renderSandbox(state.bootstrap ? state.bootstrap.sandbox : { files: [] });
         }
 
@@ -3381,6 +3824,10 @@
             const targetPath = sandboxPathEl.value.trim();
             if (!targetPath) {
                 showNotice("Enter a sandbox path first.", "bad");
+                return;
+            }
+            if (targetPath.toLowerCase().endsWith(".parquet")) {
+                showNotice("Sandbox parquet files are written through SFT export actions, not the text editor.", "bad");
                 return;
             }
             const file = await api("/api/sandbox/write", {
@@ -3490,6 +3937,509 @@
             await refreshBootstrap();
         }
 
+        function buildParquetConversionPayload() {
+            const targetPath = corpusPathEl.value.trim();
+            if (!targetPath) {
+                throw new Error("Enter a target corpus path first.");
+            }
+            if (!targetPath.toLowerCase().endsWith(".parquet")) {
+                throw new Error("Parquet conversion targets must end with .parquet.");
+            }
+            const content = corpusEditorEl.value;
+            if (!content.trim()) {
+                throw new Error("Add source text or structured rows to the corpus editor first.");
+            }
+            return {
+                path: targetPath,
+                content,
+                conversion_mode: parquetConversionModeEl.value,
+                source: parquetConversionSourceEl.value.trim() || "dashboard",
+                mode: "overwrite",
+            };
+        }
+
+        function renderParquetConversionPreview(preview) {
+            const lines = [
+                `mode: ${preview.conversion_mode}`,
+                `rows: ${preview.row_count}`,
+                `columns: ${(preview.columns || []).join(", ") || "none"}`,
+                `empty rows skipped: ${preview.rejected_empty_rows || 0}`,
+                "",
+                "sample rows:",
+                JSON.stringify(preview.sample_rows || [], null, 2),
+            ];
+            parquetPreviewEl.value = lines.join("\n");
+        }
+
+        function formatValidationReport(report) {
+            const status = report.ok ? "OK" : "Needs attention";
+            const lines = [
+                `${status}: ${report.kind || "dataset"}`,
+                `path: ${report.path || "current selection"}`,
+                `files: ${report.file_count || 0}`,
+                `records/documents: ${report.record_count || 0}`,
+                `characters: ${report.character_count || 0}`,
+                `estimated tokens: ${report.estimated_tokens || 0}`,
+            ];
+            if (report.active_token_count !== null && report.active_token_count !== undefined) {
+                lines.push(`active tokenizer tokens: ${report.active_token_count}`);
+            } else if (report.active_tokenizer && report.active_tokenizer.path) {
+                lines.push(`active tokenizer tokens: unavailable (${report.active_tokenizer.error || "tokenizer not ready"})`);
+            }
+            if (report.empty_count) {
+                lines.push(`empty/skipped rows: ${report.empty_count}`);
+            }
+            if (report.unsupported_file_count) {
+                lines.push(`unsupported/ignored files: ${report.unsupported_file_count}`);
+            }
+            if (report.duplicate_document_count) {
+                lines.push(`exact duplicate documents: ${report.duplicate_document_count}`);
+            }
+            if (report.role_counts) {
+                lines.push(`roles: user ${report.role_counts.user || 0}, assistant ${report.role_counts.assistant || 0}`);
+            }
+            if (report.warnings && report.warnings.length) {
+                lines.push("", "warnings:");
+                report.warnings.slice(0, 8).forEach((warning) => lines.push(`- ${warning}`));
+            }
+            if (report.errors && report.errors.length) {
+                lines.push("", "errors:");
+                report.errors.slice(0, 8).forEach((error) => lines.push(`- ${error}`));
+            }
+            if (report.schema_hints && report.schema_hints.length) {
+                lines.push("", "schema hints:");
+                report.schema_hints.slice(0, 8).forEach((hint) => lines.push(`- ${hint}`));
+            }
+            if (report.files && report.files.length) {
+                lines.push("", "files:");
+                report.files.slice(0, 8).forEach((file) => {
+                    lines.push(`- ${file.path}: ${file.document_count || 0} docs, ${file.character_count || 0} chars`);
+                    (file.errors || []).slice(0, 2).forEach((error) => lines.push(`  error: ${error}`));
+                });
+            }
+            if (report.unsupported_files && report.unsupported_files.length) {
+                lines.push("", "ignored files:");
+                report.unsupported_files.slice(0, 8).forEach((path) => lines.push(`- ${path}`));
+            }
+            if (report.duplicate_documents && report.duplicate_documents.length) {
+                lines.push("", "duplicate documents:");
+                report.duplicate_documents.slice(0, 8).forEach((document) => {
+                    lines.push(`- ${document.path} duplicates ${document.first_path}: ${document.preview}`);
+                });
+            }
+            return lines.join("\n");
+        }
+
+        async function validateSftDataset() {
+            const targetPath = (sandboxPathEl.value || state.selectedSandboxPath || "chat_train.jsonl").trim();
+            if (!targetPath) {
+                showNotice("Enter or select an SFT sandbox path first.", "bad");
+                return;
+            }
+            try {
+                const report = await api("/api/sandbox/sft/validate", {
+                    method: "POST",
+                    body: { path: targetPath },
+                });
+                sandboxMetaEl.textContent = formatValidationReport(report);
+                showNotice(report.ok ? `SFT dataset looks usable: ${report.record_count} conversations.` : "SFT dataset needs attention.", report.ok ? "good" : "bad");
+            } catch (error) {
+                sandboxMetaEl.textContent = `[SFT validation error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function exportSftDataset(format) {
+            const sourcePath = (sandboxPathEl.value || state.selectedSandboxPath || "chat_train.jsonl").trim();
+            if (!sourcePath) {
+                showNotice("Enter or select an SFT sandbox path first.", "bad");
+                return;
+            }
+            const isParquet = format === "parquet";
+            const defaultTarget = isParquet
+                ? sourcePath.replace(/\.(jsonl|json)$/i, ".parquet").replace(/^/, "exports/")
+                : sourcePath.replace(/\.(jsonl|json)$/i, ".normalized.jsonl");
+            const targetPath = window.prompt(isParquet ? "Export SFT dataset to parquet under assistant_sandbox. Path:" : "Write normalized SFT JSONL under assistant_sandbox. Path:", defaultTarget);
+            if (!targetPath) {
+                showNotice("SFT export cancelled.", "warn");
+                return;
+            }
+            try {
+                const result = await api("/api/sandbox/sft/export", {
+                    method: "POST",
+                    body: {
+                        source_path: sourcePath,
+                        target_path: targetPath,
+                        format,
+                        source: sourcePath,
+                    },
+                });
+                sandboxMetaEl.textContent = [
+                    `Exported ${result.source_path} -> ${result.path}`,
+                    `format: ${result.format}`,
+                    `conversations: ${result.conversation_count || result.row_count || 0}`,
+                    result.columns ? `columns: ${result.columns.join(", ")}` : "",
+                ].filter(Boolean).join("\n");
+                showNotice(`Exported SFT dataset to ${result.path}.`, "good");
+                await refreshBootstrap();
+                if (!isParquet) {
+                    await loadSandboxFile(result.path);
+                }
+            } catch (error) {
+                sandboxMetaEl.textContent = `[SFT export error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        function formatSftExportPreview(result) {
+            const lines = [
+                `Preview ${result.source_path}`,
+                `format: ${result.format}`,
+                `conversations: ${result.conversation_count || result.row_count || 0}`,
+            ];
+            if (result.columns) {
+                lines.push(`columns: ${result.columns.join(", ")}`);
+            }
+            if (result.train_count !== undefined) {
+                lines.push(`train: ${result.train_count}`);
+                lines.push(`val: ${result.val_count}`);
+                lines.push(`seed: ${result.seed}`);
+                lines.push(`val ratio: ${result.val_ratio}`);
+            }
+            if (result.sample_rows && result.sample_rows.length) {
+                lines.push("", "sample rows:", JSON.stringify(result.sample_rows, null, 2));
+            }
+            if (result.sample_jsonl) {
+                lines.push("", "sample jsonl:", result.sample_jsonl.trim());
+            }
+            if (result.sample_train_jsonl) {
+                lines.push("", "sample train jsonl:", result.sample_train_jsonl.trim());
+            }
+            if (result.sample_val_jsonl) {
+                lines.push("", "sample val jsonl:", result.sample_val_jsonl.trim());
+            }
+            return lines.join("\n");
+        }
+
+        async function previewSftExport() {
+            const sourcePath = (sandboxPathEl.value || state.selectedSandboxPath || "chat_train.jsonl").trim();
+            if (!sourcePath) {
+                showNotice("Enter or select an SFT sandbox path first.", "bad");
+                return;
+            }
+            const choice = (window.prompt("Preview format: parquet, jsonl, or split", "parquet") || "").trim().toLowerCase();
+            if (!choice) {
+                showNotice("SFT export preview cancelled.", "warn");
+                return;
+            }
+            const formatMap = {
+                parquet: "preview_parquet",
+                jsonl: "preview_jsonl",
+                split: "preview_split_jsonl",
+                split_jsonl: "preview_split_jsonl",
+            };
+            const previewFormat = formatMap[choice];
+            if (!previewFormat) {
+                showNotice("Choose parquet, jsonl, or split.", "bad");
+                return;
+            }
+            const body = {
+                source_path: sourcePath,
+                format: previewFormat,
+                source: sourcePath,
+            };
+            if (previewFormat === "preview_split_jsonl") {
+                const ratioText = window.prompt("Validation ratio between 0 and 1:", "0.1");
+                if (!ratioText) {
+                    showNotice("SFT export preview cancelled.", "warn");
+                    return;
+                }
+                const seedText = window.prompt("Shuffle seed:", "1337");
+                if (!seedText) {
+                    showNotice("SFT export preview cancelled.", "warn");
+                    return;
+                }
+                const valRatio = Number(ratioText);
+                const seed = Number.parseInt(seedText, 10);
+                if (!Number.isFinite(valRatio) || valRatio <= 0 || valRatio >= 1 || !Number.isFinite(seed)) {
+                    showNotice("Enter a validation ratio between 0 and 1 and a numeric seed.", "bad");
+                    return;
+                }
+                body.val_ratio = valRatio;
+                body.seed = seed;
+            }
+            try {
+                const result = await api("/api/sandbox/sft/export", {
+                    method: "POST",
+                    body,
+                });
+                sandboxMetaEl.textContent = formatSftExportPreview(result);
+                showNotice(`Previewed SFT ${result.format} export.`, "good");
+            } catch (error) {
+                sandboxMetaEl.textContent = `[SFT export preview error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function splitSftDataset() {
+            const sourcePath = (sandboxPathEl.value || state.selectedSandboxPath || "chat_train.jsonl").trim();
+            if (!sourcePath) {
+                showNotice("Enter or select an SFT sandbox path first.", "bad");
+                return;
+            }
+            const defaultTrain = sourcePath.replace(/\.(jsonl|json)$/i, ".train.jsonl").replace(/^/, "exports/");
+            const defaultVal = sourcePath.replace(/\.(jsonl|json)$/i, ".val.jsonl").replace(/^/, "exports/");
+            const trainPath = window.prompt("Write SFT train split under assistant_sandbox. Path:", defaultTrain);
+            if (!trainPath) {
+                showNotice("SFT split cancelled.", "warn");
+                return;
+            }
+            const valPath = window.prompt("Write SFT validation split under assistant_sandbox. Path:", defaultVal);
+            if (!valPath) {
+                showNotice("SFT split cancelled.", "warn");
+                return;
+            }
+            const ratioText = window.prompt("Validation ratio between 0 and 1:", "0.1");
+            if (!ratioText) {
+                showNotice("SFT split cancelled.", "warn");
+                return;
+            }
+            const seedText = window.prompt("Shuffle seed:", "1337");
+            if (!seedText) {
+                showNotice("SFT split cancelled.", "warn");
+                return;
+            }
+            const valRatio = Number(ratioText);
+            const seed = Number.parseInt(seedText, 10);
+            if (!Number.isFinite(valRatio) || valRatio <= 0 || valRatio >= 1 || !Number.isFinite(seed)) {
+                showNotice("Enter a validation ratio between 0 and 1 and a numeric seed.", "bad");
+                return;
+            }
+            try {
+                const result = await api("/api/sandbox/sft/export", {
+                    method: "POST",
+                    body: {
+                        source_path: sourcePath,
+                        target_path: trainPath,
+                        val_target_path: valPath,
+                        format: "split_jsonl",
+                        val_ratio: valRatio,
+                        seed,
+                    },
+                });
+                sandboxMetaEl.textContent = [
+                    `Split ${result.source_path}`,
+                    `train: ${result.train_path} (${result.train_count} conversations)`,
+                    `val: ${result.val_path} (${result.val_count} conversations)`,
+                    `seed: ${result.seed}`,
+                    `val ratio: ${result.val_ratio}`,
+                ].join("\n");
+                showNotice(`Created SFT train/val split: ${result.train_count}/${result.val_count}.`, "good");
+                await refreshBootstrap();
+                await loadSandboxFile(result.train_path);
+            } catch (error) {
+                sandboxMetaEl.textContent = `[SFT split error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function validateCorpusDataset() {
+            const targetPath = (corpusPathEl.value || "").trim();
+            try {
+                const report = await api("/api/corpus/validate", {
+                    method: "POST",
+                    body: { path: targetPath },
+                });
+                corpusMetaEl.textContent = formatValidationReport(report);
+                showNotice(report.ok ? `Corpus looks usable: ${report.record_count} documents.` : "Corpus needs attention.", report.ok ? "good" : "bad");
+            } catch (error) {
+                corpusMetaEl.textContent = `[corpus validation error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        function formatCorpusInspection(report) {
+            const lines = [
+                `Trainer corpus inspection: ${report.split}`,
+                `path: ${report.split_path}`,
+                `files: ${report.file_count}`,
+                `documents: ${report.document_count}`,
+                `characters: ${report.character_count}`,
+                `estimated tokens: ${report.estimated_tokens || 0}`,
+                `avg/max chars: ${report.average_document_chars || 0} / ${report.max_document_chars || 0}`,
+                `duplicates: ${report.duplicate_document_count || 0}`,
+                `very long docs: ${report.very_long_document_count || 0} >= ${report.long_doc_chars || 0} chars`,
+            ];
+            if (report.file_type_counts && Object.keys(report.file_type_counts).length) {
+                lines.push("", "file types:");
+                Object.entries(report.file_type_counts).forEach(([suffix, count]) => lines.push(`- ${suffix}: ${count}`));
+            }
+            if (report.sample_files && report.sample_files.length) {
+                lines.push("", "sample files:");
+                report.sample_files.slice(0, 6).forEach((path) => lines.push(`- ${path}`));
+            }
+            if (report.longest_documents && report.longest_documents.length) {
+                lines.push("", "longest documents:");
+                report.longest_documents.slice(0, 5).forEach((document) => {
+                    lines.push(`- doc ${document.index}: ${document.character_count} chars | ${document.path}`);
+                });
+            }
+            if (report.documents && report.documents.length) {
+                lines.push("", "extracted documents:");
+                report.documents.forEach((document) => {
+                    lines.push(`[doc ${document.index}] ${document.character_count} chars${document.truncated ? " (truncated)" : ""}`);
+                    lines.push(document.text);
+                    lines.push("");
+                });
+            }
+            return lines.join("\n").trim();
+        }
+
+        async function inspectCorpusDocuments() {
+            const showDocs = Number.parseInt(corpusInspectShowDocsEl.value || "3", 10);
+            const maxChars = Number.parseInt(corpusInspectMaxCharsEl.value || "240", 10);
+            const longDocChars = Number.parseInt(corpusInspectLongDocCharsEl.value || "8000", 10);
+            if (!Number.isFinite(showDocs) || showDocs < 0 || !Number.isFinite(maxChars) || maxChars < 1 || !Number.isFinite(longDocChars) || longDocChars < 1) {
+                showNotice("Enter valid Show Docs, Max Chars, and Long Doc Chars values.", "bad");
+                return;
+            }
+            try {
+                const report = await api("/api/corpus/inspect", {
+                    method: "POST",
+                    body: {
+                        split: corpusInspectSplitEl.value,
+                        show_docs: showDocs,
+                        max_chars: maxChars,
+                        long_doc_chars: longDocChars,
+                    },
+                });
+                corpusMetaEl.textContent = formatCorpusInspection(report);
+                showNotice(`Inspected ${report.document_count} ${report.split} document(s).`, report.document_count ? "good" : "warn");
+            } catch (error) {
+                corpusMetaEl.textContent = `[corpus inspect error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function previewParquetConversion() {
+            try {
+                const payload = buildParquetConversionPayload();
+                const preview = await api("/api/corpus/parquet/preview", {
+                    method: "POST",
+                    body: payload,
+                });
+                renderParquetConversionPreview(preview);
+                showNotice(`Previewed ${preview.row_count} parquet rows.`, "good");
+            } catch (error) {
+                parquetPreviewEl.value = `[parquet preview error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function writeParquetConversion() {
+            try {
+                const payload = buildParquetConversionPayload();
+                const file = await api("/api/corpus/parquet/write", {
+                    method: "POST",
+                    body: payload,
+                });
+                state.selectedCorpusPath = file.path;
+                corpusPathEl.value = file.path;
+                setCorpusEditorMode("parquet-preview", file);
+                corpusEditorEl.value = JSON.stringify(file.sample_rows || [], null, 2);
+                renderParquetConversionPreview({
+                    conversion_mode: file.conversion ? file.conversion.conversion_mode : payload.conversion_mode,
+                    row_count: file.row_count || 0,
+                    columns: file.columns || [],
+                    rejected_empty_rows: file.conversion ? file.conversion.rejected_empty_rows : 0,
+                    sample_rows: file.sample_rows || [],
+                });
+                corpusMetaEl.textContent = `Saved ${file.path} | parquet | ${file.row_count || 0} rows | ${file.column_count || 0} columns | ${new Date(file.updated_at * 1000).toLocaleString()}`;
+                showNotice(`Created parquet corpus file ${file.path}.`, "good");
+                await refreshBootstrap();
+                await loadCorpusFile(file.path);
+            } catch (error) {
+                parquetPreviewEl.value = `[parquet write error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        function defaultCorpusSplitPath(kind) {
+            const current = (corpusPathEl.value || "split.txt").trim().replace(/^\/+/, "");
+            const name = current.split("/").pop() || "split.txt";
+            return `${kind}/${name}`;
+        }
+
+        function buildCorpusSplitPayload(trainPath = null, valPath = null) {
+            const valRatio = Number(corpusSplitValRatioEl.value || 0.1);
+            const seed = Number.parseInt(corpusSplitSeedEl.value || "1337", 10);
+            if (!Number.isFinite(valRatio) || valRatio <= 0 || valRatio >= 1 || !Number.isFinite(seed)) {
+                throw new Error("Enter a validation ratio between 0 and 1 and a numeric seed.");
+            }
+            return {
+                train_path: trainPath || defaultCorpusSplitPath("train"),
+                val_path: valPath || defaultCorpusSplitPath("val"),
+                content: corpusEditorEl.value,
+                split_mode: corpusSplitModeEl.value,
+                val_ratio: valRatio,
+                seed,
+            };
+        }
+
+        function renderCorpusSplitPreview(result) {
+            corpusMetaEl.textContent = [
+                `Split preview | ${result.split_mode}`,
+                `records: ${result.record_count}`,
+                `train: ${result.train_count}`,
+                `val: ${result.val_count}`,
+                `seed: ${result.seed}`,
+                `val ratio: ${result.val_ratio}`,
+                "",
+                `sample train: ${JSON.stringify(result.sample_train || [], null, 2)}`,
+                `sample val: ${JSON.stringify(result.sample_val || [], null, 2)}`,
+            ].join("\n");
+        }
+
+        async function previewCorpusSplit() {
+            try {
+                const preview = await api("/api/corpus/split/preview", {
+                    method: "POST",
+                    body: buildCorpusSplitPayload(),
+                });
+                renderCorpusSplitPreview(preview);
+                showNotice(`Previewed corpus split: ${preview.train_count}/${preview.val_count}.`, "good");
+            } catch (error) {
+                corpusMetaEl.textContent = `[corpus split preview error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function writeCorpusSplit() {
+            const trainPath = window.prompt("Write train split under local_corpus. Path:", defaultCorpusSplitPath("train"));
+            if (!trainPath) {
+                showNotice("Corpus split cancelled.", "warn");
+                return;
+            }
+            const valPath = window.prompt("Write validation split under local_corpus. Path:", defaultCorpusSplitPath("val"));
+            if (!valPath) {
+                showNotice("Corpus split cancelled.", "warn");
+                return;
+            }
+            try {
+                const result = await api("/api/corpus/split/write", {
+                    method: "POST",
+                    body: buildCorpusSplitPayload(trainPath, valPath),
+                });
+                renderCorpusSplitPreview(result);
+                showNotice(`Wrote corpus split: ${result.train_path} and ${result.val_path}.`, "good");
+                await refreshBootstrap();
+                await loadCorpusFile(result.train_path);
+            } catch (error) {
+                corpusMetaEl.textContent = `[corpus split write error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
         async function deleteCorpusFile() {
             const targetPath = corpusPathEl.value.trim();
             if (!targetPath) {
@@ -3513,6 +4463,7 @@
             state.selectedCorpusPath = "";
             corpusPathEl.value = "";
             corpusEditorEl.value = "";
+            parquetPreviewEl.value = "";
             setCorpusEditorMode("text");
             corpusMetaEl.textContent = "New corpus file. Use .txt/.json/.jsonl for text content or .parquet for JSON object records.";
             renderCorpus(state.bootstrap ? state.bootstrap.corpus : { files: [] });
@@ -3565,27 +4516,111 @@
             await saveSandboxFile();
         }
 
-        function appendMessage(role, content) {
-            state.chatMessages.push({ role, content });
+        function createChatMessage(role, content) {
+            return { id: state.nextChatMessageId++, role, content };
+        }
+
+        function chatMessageApiPayload(messages) {
+            return messages.map((message) => ({ role: message.role, content: message.content }));
+        }
+
+        function parseTranscriptMessages(rawText) {
+            let payload;
+            try {
+                payload = JSON.parse(rawText || "");
+            } catch (error) {
+                throw new Error("Loaded sandbox content is not valid JSON.");
+            }
+            const messages = payload && Array.isArray(payload.messages) ? payload.messages : null;
+            if (!messages || !messages.length) {
+                throw new Error("Transcript JSON must include a non-empty messages array.");
+            }
+            return messages.map((message, index) => {
+                if (!message || typeof message !== "object") {
+                    throw new Error(`Transcript message ${index + 1} must be an object.`);
+                }
+                const role = String(message.role || "").trim();
+                const content = String(message.content || "").trim();
+                if (!["user", "assistant", "system"].includes(role)) {
+                    throw new Error(`Transcript message ${index + 1} has an unsupported role.`);
+                }
+                if (!content) {
+                    throw new Error(`Transcript message ${index + 1} is empty.`);
+                }
+                return createChatMessage(role, content);
+            });
+        }
+
+        function selectedChatMessages() {
+            const selected = new Set(state.selectedChatMessageIds);
+            return state.chatMessages.filter((message) => selected.has(message.id));
+        }
+
+        function updateChatSelectionMeta() {
+            const selectedCount = selectedChatMessages().length;
+            const total = state.chatMessages.length;
+            chatSelectionMetaEl.textContent = selectedCount
+                ? `${selectedCount} of ${total} turn(s) selected. Transcript exports will use selected turns.`
+                : "No selected turns. Transcript exports will use the full conversation.";
+        }
+
+        function setChatMessageSelected(messageId, selected) {
+            const ids = new Set(state.selectedChatMessageIds);
+            if (selected) {
+                ids.add(messageId);
+            } else {
+                ids.delete(messageId);
+            }
+            state.selectedChatMessageIds = Array.from(ids);
+            updateChatSelectionMeta();
+            renderChatMessages(false);
+        }
+
+        function selectAllChatMessages() {
+            state.selectedChatMessageIds = state.chatMessages.map((message) => message.id);
             renderChatMessages();
         }
 
-        function renderChatMessages() {
+        function clearChatSelection() {
+            state.selectedChatMessageIds = [];
+            renderChatMessages();
+        }
+
+        function appendMessage(role, content) {
+            state.chatMessages.push(createChatMessage(role, content));
+            renderChatMessages();
+        }
+
+        function renderChatMessages(scrollToEnd = true) {
             chatMessagesEl.innerHTML = "";
             if (!state.chatMessages.length) {
                 chatMessagesEl.innerHTML = `<div class="message system"><div class="message-role">Hint</div>Use the truth-first preset, then ask the assistant to explain uncertainty, draft validated SFT rows into chat_train.jsonl, or help create corpus files under local_corpus/train.</div>`;
+                updateChatSelectionMeta();
                 return;
             }
             state.chatMessages.forEach((message) => {
                 const row = document.createElement("div");
-                row.className = `message ${message.role}`;
+                const isSelected = state.selectedChatMessageIds.includes(message.id);
+                row.className = `message ${message.role}${isSelected ? " selected" : ""}`;
                 row.innerHTML = `
-                    <div class="message-role">${message.role}</div>
-                    <div>${message.content}</div>
+                    <div class="message-head">
+                        <div class="message-role">${message.role}</div>
+                        <label class="message-select">
+                            <input type="checkbox" ${isSelected ? "checked" : ""} data-chat-select="${message.id}">
+                            export
+                        </label>
+                    </div>
+                    <div>${escapeHtml(message.content)}</div>
                 `;
+                row.querySelector("[data-chat-select]").addEventListener("change", (event) => {
+                    setChatMessageSelected(message.id, event.target.checked);
+                });
                 chatMessagesEl.appendChild(row);
             });
-            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            updateChatSelectionMeta();
+            if (scrollToEnd) {
+                chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            }
         }
 
         function currentDesignPayload() {
@@ -3614,6 +4649,81 @@
 
         function normalizeRelativePath(path) {
             return String(path || "").replaceAll("\\", "/").replace(/^\/+/, "");
+        }
+
+        function splitPathList(rawValue) {
+            return String(rawValue || "")
+                .split(/[;\n|]+/)
+                .map((piece) => piece.trim())
+                .filter(Boolean);
+        }
+
+        function localResolvePath(pathValue, kind) {
+            const builder = state.bootstrap ? state.bootstrap.builder || {} : {};
+            const raw = String(pathValue || "").trim();
+            if (!raw) return null;
+            const normalized = raw.replaceAll("\\", "/");
+            const isAbsolute = /^[a-zA-Z]:[\\/]/.test(raw) || normalized.startsWith("/");
+            if (isAbsolute) {
+                return { input: raw, kind, scope: "absolute", resolved_path: raw, note: "Absolute path.", exists: null };
+            }
+            if (kind === "corpus" || normalized.startsWith("train/") || normalized.startsWith("val/")) {
+                return {
+                    input: raw,
+                    kind,
+                    scope: "local_corpus",
+                    resolved_path: `${builder.corpus_dir || "local_corpus"}/${normalized}`,
+                    note: kind === "sft" ? "Looks like a corpus path; Chat SFT usually wants assistant_sandbox JSONL." : "Resolved relative to local_corpus.",
+                    exists: null,
+                };
+            }
+            if (kind === "corpus_dir") {
+                return { input: raw, kind, scope: "repo_relative", resolved_path: raw, note: "Directory path used as entered.", exists: null };
+            }
+            return {
+                input: raw,
+                kind,
+                scope: "assistant_sandbox",
+                resolved_path: `${builder.sandbox_dir || "assistant_sandbox"}/${normalized}`,
+                note: "Resolved relative to assistant_sandbox.",
+                exists: null,
+            };
+        }
+
+        function collectPathHintsSnapshot() {
+            const hints = [];
+            const add = (label, value, kind) => {
+                const hint = localResolvePath(value, kind);
+                if (hint) hints.push({ label, ...hint });
+            };
+            add("Tokenizer corpus_dir", document.getElementById("tokenizerCorpusDir").value, "corpus_dir");
+            add("Base corpus_dir", document.getElementById("baseCorpusDir").value, "corpus_dir");
+            splitPathList(document.getElementById("sftTrainFiles").value).forEach((pathValue) => add("SFT train file", pathValue, "sft"));
+            splitPathList(document.getElementById("sftValFiles").value).forEach((pathValue) => add("SFT val file", pathValue, "sft"));
+            add("Sandbox editor", sandboxPathEl.value, "sandbox");
+            add("Corpus editor", corpusPathEl.value, "corpus");
+            add("Runtime model", document.getElementById("runtimeModelPath").value, "model");
+            return hints;
+        }
+
+        function renderPathHints(hints = collectPathHintsSnapshot()) {
+            const box = document.getElementById("pathResolutionBox");
+            if (!box) return;
+            if (!hints.length) {
+                box.textContent = "No active path fields to resolve yet.";
+                return;
+            }
+            box.innerHTML = [
+                "<div><strong>Path Resolution</strong></div>",
+                ...hints.slice(0, 10).map((hint) => `
+                    <div style="margin-top: 8px;">
+                        <span class="chip">${escapeHtml(hint.scope || "unknown")}</span>
+                        <strong>${escapeHtml(hint.label || hint.field || hint.kind || "path")}</strong>
+                        <span>${escapeHtml(hint.input || "")}</span>
+                        <div class="footer-note">${escapeHtml(hint.resolved_path || "")}${hint.note ? ` | ${escapeHtml(hint.note)}` : ""}</div>
+                    </div>
+                `),
+            ].join("");
         }
 
         function collectStageCompatibilityWarnings(jobType, params) {
@@ -3659,6 +4769,140 @@
             }
 
             return [...new Set(warnings)];
+        }
+
+        function summarizePreflight(preflight) {
+            if (!preflight || !Array.isArray(preflight.checks)) return "";
+            const errors = preflight.checks.filter((check) => check.status === "error");
+            const warnings = preflight.checks.filter((check) => check.status === "warning");
+            const selected = errors.length ? errors : warnings;
+            return selected.slice(0, 3).map((check) => check.message).join(" ");
+        }
+
+        function summarizeFormValidation(validation) {
+            if (!validation || !Array.isArray(validation.checks)) return "";
+            const errors = validation.checks.filter((check) => check.status === "error");
+            const warnings = validation.checks.filter((check) => check.status === "warning");
+            const selected = errors.length ? errors : warnings;
+            return selected.slice(0, 3).map((check) => `${check.field}: ${check.message}`).join(" ");
+        }
+
+        async function validateJobParams(jobType, params) {
+            return api("/api/dashboard/jobs/validate", {
+                method: "POST",
+                body: {
+                    job_type: jobType,
+                    params,
+                },
+            });
+        }
+
+        async function runJobPreflight(jobType, params) {
+            return api("/api/dashboard/jobs/preflight", {
+                method: "POST",
+                body: {
+                    job_type: jobType,
+                    params,
+                },
+            });
+        }
+
+        function renderJobPreview(preview) {
+            const checks = preview.preflight && Array.isArray(preview.preflight.checks) ? preview.preflight.checks : [];
+            const checkLines = checks.map((check) => `[${check.status}] ${check.message}${check.detail ? ` ${check.detail}` : ""}`);
+            const validationChecks = preview.form_validation && Array.isArray(preview.form_validation.checks) ? preview.form_validation.checks : [];
+            const validationLines = validationChecks.map((check) => `[${check.status}] ${check.field}: ${check.message}${check.detail ? ` ${check.detail}` : ""}`);
+            const pathHints = Array.isArray(preview.path_hints) ? preview.path_hints : [];
+            const pathLines = pathHints.map((hint) => `[${hint.scope}] ${hint.field}: ${hint.input} -> ${hint.resolved_path}${hint.note ? ` (${hint.note})` : ""}`);
+            const lines = [
+                `Job type: ${preview.job_type}`,
+                `Working dir: ${preview.cwd}`,
+                "",
+                "Form validation:",
+                validationLines.length ? validationLines.join("\n") : "[no risky values detected]",
+                "",
+                "Path resolution:",
+                pathLines.length ? pathLines.join("\n") : "[no path fields detected]",
+                "",
+                "Command:",
+                preview.display_command,
+                "",
+                "Preflight:",
+                checkLines.length ? checkLines.join("\n") : "[no checks]",
+                "",
+                "Dashboard job environment:",
+                ...(preview.environment_notes || []).map((note) => `- ${note}`),
+            ];
+            jobSummaryEl.textContent = `Command preview for ${preview.job_type}`;
+            state.currentCommandPreview = preview.display_command || "";
+            jobCommandPreviewEl.textContent = state.currentCommandPreview;
+            state.currentJobLogLines = lines;
+            renderJobLogs();
+            copyCommandBtnEl.disabled = !state.currentCommandPreview;
+            if (pathHints.length) {
+                renderPathHints(pathHints);
+            }
+        }
+
+        function renderResumePreview(preview) {
+            const resume = preview.resume || {};
+            const checkpoint = resume.checkpoint || {};
+            const diff = resume.command_diff || {};
+            const diffLines = [];
+            (diff.added || []).forEach((item) => diffLines.push(`+ ${item.flag}${item.value !== "true" ? ` ${item.value}` : ""}`));
+            (diff.changed || []).forEach((item) => diffLines.push(`~ ${item.flag}: ${item.from || "[empty]"} -> ${item.to || "[empty]"}`));
+            (diff.removed || []).forEach((item) => diffLines.push(`- ${item.flag}${item.value !== "true" ? ` ${item.value}` : ""}`));
+            const lines = [
+                `Source job: ${resume.source_label || preview.source_job && preview.source_job.label || "selected job"} (${resume.source_job_id || ""})`,
+                `Job type: ${resume.job_type || ""}`,
+                `Checkpoint tag: ${checkpoint.tag || "unknown"}`,
+                `Resume step: ${resume.checkpoint_step ?? "unknown"}`,
+                "",
+                "Command:",
+                resume.display_command || "",
+                "",
+                "Changed resume params:",
+                `resume_from_step: ${resume.checkpoint_step ?? "unknown"}`,
+                `save_every: ${resume.params && resume.params.save_every ? resume.params.save_every : "unchanged"}`,
+                "",
+                "Command diff:",
+                diffLines.length ? diffLines.join("\n") : "[no command flag changes detected]",
+            ];
+            jobSummaryEl.textContent = `Resume preview for ${resume.source_label || "selected job"}`;
+            state.currentCommandPreview = resume.display_command || "";
+            jobCommandPreviewEl.textContent = state.currentCommandPreview || "No resume command available.";
+            state.currentJobLogLines = lines;
+            renderJobLogs();
+            copyCommandBtnEl.disabled = !state.currentCommandPreview;
+        }
+
+        async function previewJobCommand(jobType, formId = null) {
+            const params = getJobParams(jobType, formId);
+            try {
+                const preview = await api("/api/dashboard/jobs/preview", {
+                    method: "POST",
+                    body: {
+                        job_type: jobType,
+                        params,
+                    },
+                });
+                renderJobPreview(preview);
+                const preflight = preview.preflight || {};
+                const validation = preview.form_validation || {};
+                if (!validation.ok) {
+                    showNotice(`Preview ready, but form validation found ${validation.error_count || 0} error(s).`, "bad");
+                } else if (!preflight.ok) {
+                    showNotice(`Preview ready, but preflight found ${preflight.error_count || 0} blocker(s).`, "bad");
+                } else if (validation.warning_count) {
+                    showNotice(`Preview ready with ${validation.warning_count} form warning(s).`, "warn");
+                } else if (preflight.warning_count) {
+                    showNotice(`Preview ready with ${preflight.warning_count} warning(s).`, "warn");
+                } else {
+                    showNotice(`Preview ready for ${jobType}.`, "good");
+                }
+            } catch (error) {
+                showNotice(error.message, "bad");
+            }
         }
 
         function updateChattyCogBridgeStatus(buildPayload) {
@@ -3770,6 +5014,8 @@
             const corpus = state.bootstrap.corpus;
             const benchmarks = state.bootstrap.benchmarks;
             const activity = state.bootstrap.activity;
+            const report = state.bootstrap.report;
+            const readiness = state.bootstrap.readiness;
 
             setText("repoRootValue", builder.repo_root);
             setText("baseDirValue", builder.base_dir);
@@ -3831,7 +5077,11 @@
             renderCorpus(corpus);
             renderBenchmarks(benchmarks);
             renderActivity(activity);
+            renderReportStatus(report);
+            renderReadiness(readiness);
+            renderRunProfiles();
             renderPresets(builder.guided_presets);
+            renderPathHints();
             renderHardwareSummary(builder);
             renderCheckpointStageNotes(builder);
             renderDesigns(builder.designs);
@@ -3941,7 +5191,21 @@
 
         async function launchJob(jobType, formId = null) {
             const params = getJobParams(jobType, formId);
+            const validation = await validateJobParams(jobType, params);
+            if (!validation.ok) {
+                const summary = summarizeFormValidation(validation) || "Form validation found a blocking issue.";
+                showNotice(`Fix ${jobType} settings first: ${summary}`, "bad");
+                jobSummaryEl.textContent = `Form validation stopped ${jobType}.\n\n${validation.checks.map((check) => `[${check.status}] ${check.field}: ${check.message}${check.detail ? ` ${check.detail}` : ""}`).join("\n")}`;
+                return;
+            }
             const compatibilityWarnings = collectStageCompatibilityWarnings(jobType, params);
+            const preflight = await runJobPreflight(jobType, params);
+            if (!preflight.ok) {
+                const summary = summarizePreflight(preflight) || "Preflight found a blocking issue.";
+                showNotice(`Preflight stopped ${jobType}: ${summary}`, "bad");
+                jobSummaryEl.textContent = `Preflight stopped ${jobType}.\n\n${preflight.checks.map((check) => `[${check.status}] ${check.message}${check.detail ? ` ${check.detail}` : ""}`).join("\n")}`;
+                return;
+            }
             const label = jobType.replaceAll("_", " ");
             const response = await api("/api/dashboard/jobs", {
                 method: "POST",
@@ -3952,9 +5216,12 @@
                 },
             });
             state.selectedJobId = response.job.id;
-            if (compatibilityWarnings.length) {
-                const hint = compatibilityWarnings.slice(0, 2).join(" ");
-                const suffix = compatibilityWarnings.length > 2 ? " Review the stage inputs if this was not intentional." : "";
+            const validationWarnings = (validation.checks || []).filter((check) => check.status === "warning").map((check) => `${check.field}: ${check.message}`);
+            const preflightWarnings = (preflight.checks || []).filter((check) => check.status === "warning").map((check) => check.message);
+            const warnings = [...new Set([...validationWarnings, ...preflightWarnings, ...compatibilityWarnings])];
+            if (warnings.length) {
+                const hint = warnings.slice(0, 2).join(" ");
+                const suffix = warnings.length > 2 ? " Review the stage inputs if this was not intentional." : "";
                 showNotice(`Launched ${jobType}. Heads up: ${hint}${suffix}`, "warn");
             } else {
                 showNotice(`Launched ${jobType}.`);
@@ -4002,12 +5269,19 @@
 
         async function pauseSelectedJob() {
             if (!state.selectedJobId) return;
-            await api(`/api/dashboard/jobs/${state.selectedJobId}/pause`, { method: "POST" });
             const job = state.selectedJob;
+            if (job && (job.latest_checkpoint_step === undefined || job.latest_checkpoint_step === null)) {
+                const shouldPause = window.confirm("No saved checkpoint is visible for this job yet. Pausing now may stop the run without anything resumable. Pause anyway?");
+                if (!shouldPause) {
+                    showNotice("Pause cancelled. Wait for a checkpoint if you want a resumable stop.", "warn");
+                    return;
+                }
+            }
+            await api(`/api/dashboard/jobs/${state.selectedJobId}/pause`, { method: "POST" });
             if (job && job.latest_checkpoint_step !== undefined && job.latest_checkpoint_step !== null) {
                 showNotice(`Pause requested. The run will stop and stay resumable from at least step ${job.latest_checkpoint_step}.`, "good");
             } else {
-                showNotice("Pause requested. The run will stop at a safe point and become resumable after it reaches a saved checkpoint.", "good");
+                showNotice("Pause requested without a visible checkpoint. If no checkpoint is saved before stop, this may not be resumable.", "warn");
             }
             await refreshBootstrap();
             await refreshSelectedJob();
@@ -4015,6 +5289,20 @@
 
         async function resumeSelectedJob() {
             if (!state.selectedJobId) return;
+            let preview;
+            try {
+                preview = await api(`/api/dashboard/jobs/${state.selectedJobId}/resume-preview`);
+                renderResumePreview(preview);
+            } catch (error) {
+                showNotice(error.message, "bad");
+                return;
+            }
+            const resume = preview.resume || {};
+            const shouldResume = window.confirm(`Resume ${resume.source_label || "selected job"} from checkpoint step ${resume.checkpoint_step}?`);
+            if (!shouldResume) {
+                showNotice("Resume cancelled after preview.", "warn");
+                return;
+            }
             const response = await api(`/api/dashboard/jobs/${state.selectedJobId}/resume`, { method: "POST" });
             state.selectedJobId = response.job.id;
             const step = response.job && response.job.requested_resume_step !== undefined && response.job.requested_resume_step !== null
@@ -4041,6 +5329,32 @@
                 return;
             }
             showNotice("This selected job does not map to an eval/load checkpoint target.", "bad");
+        }
+
+        async function copyCurrentCommand() {
+            const command = (state.currentCommandPreview || jobCommandPreviewEl.textContent || "").trim();
+            if (!command || command === "No job selected." || command === "No command recorded." || command === "No resume command available.") {
+                showNotice("No command is available to copy yet.", "bad");
+                return;
+            }
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(command);
+                } else {
+                    const textarea = document.createElement("textarea");
+                    textarea.value = command;
+                    textarea.setAttribute("readonly", "readonly");
+                    textarea.style.position = "fixed";
+                    textarea.style.left = "-9999px";
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(textarea);
+                }
+                showNotice("Copied command to clipboard.", "good");
+            } catch (error) {
+                showNotice(`Could not copy command: ${error.message}`, "bad");
+            }
         }
 
         async function loadChatRuntime(overrides = null) {
@@ -4101,7 +5415,7 @@
             state.isSendingChat = true;
             appendMessage("user", prompt);
             chatInputEl.value = "";
-            const assistantMessage = { role: "assistant", content: "" };
+            const assistantMessage = createChatMessage("assistant", "");
             state.chatMessages.push(assistantMessage);
             renderChatMessages();
 
@@ -4110,24 +5424,51 @@
                 const messageHistory = state.chatMessages
                     .filter((message) => message.role === "user" || message.role === "assistant")
                     .slice(0, -1);
+                const messageHistoryPayload = chatMessageApiPayload(messageHistory);
 
                 if (provider === "local_runtime") {
                     const sandboxPaths = state.selectedSandboxPath ? [state.selectedSandboxPath] : [];
                     const corpusPaths = state.selectedCorpusPath ? [state.selectedCorpusPath] : [];
                     const toolsEnabled = assistantToolsEnabledEl.value === "1";
                     const endpoint = toolsEnabled ? "/api/runtime/assist" : "/api/runtime/chat";
-                    const response = await api(endpoint, {
+                    const baseAssistBody = {
+                        messages: messageHistoryPayload,
+                        temperature: Number(cockpitTemperatureEl.value || 0.2),
+                        max_tokens: Number(cockpitMaxTokensEl.value || 512),
+                        system_prompt: cockpitSystemPromptEl.value.trim(),
+                        sandbox_paths: sandboxPaths,
+                        corpus_paths: corpusPaths,
+                        max_actions: 3,
+                        action_mode: assistantActionModeEl.value,
+                    };
+                    let response = await api(endpoint, {
                         method: "POST",
-                        body: {
-                            messages: messageHistory,
-                            temperature: Number(cockpitTemperatureEl.value || 0.2),
-                            max_tokens: Number(cockpitMaxTokensEl.value || 512),
-                            system_prompt: cockpitSystemPromptEl.value.trim(),
-                            sandbox_paths: sandboxPaths,
-                            corpus_paths: corpusPaths,
-                            max_actions: 3,
-                        },
+                        body: baseAssistBody,
                     });
+                    const allActions = [];
+                    let approvalCount = 0;
+                    while (response.pending_action && approvalCount < 3) {
+                        assistantMessage.content = `${response.text || "Pending local action."}\n\n[pending local action]\n${formatPendingActionPreview(response.pending_action)}`;
+                        renderChatMessages();
+                        const approved = await requestAssistantActionApproval(response.pending_action);
+                        if (!approved) {
+                            showNotice("Assistant action was not approved.", "warn");
+                            break;
+                        }
+                        response = await api("/api/runtime/assist", {
+                            method: "POST",
+                            body: {
+                                ...baseAssistBody,
+                                approved_action: {
+                                    tool: response.pending_action.tool,
+                                    args: response.pending_action.args || {},
+                                },
+                                approved_action_text: response.pending_action.assistant_text || "",
+                            },
+                        });
+                        approvalCount += 1;
+                    }
+                    allActions.push(...(response.actions || []));
                     assistantMessage.content = response.text || "[empty response]";
                     updateLastTelemetry({
                         provider,
@@ -4138,9 +5479,12 @@
                         totalTokens: response.raw && response.raw.usage ? response.raw.usage.total_tokens : null,
                         finishReason: response.raw && response.raw.choices && response.raw.choices[0] ? response.raw.choices[0].finish_reason || "" : "",
                     });
-                    if (response.actions && response.actions.length) {
-                        assistantMessage.content += `\n\n[local actions]\n${summarizeActions(response.actions)}`;
-                        const autotuneAction = response.actions.find((action) => action.tool === "autotune_settings" && action.status === "ok");
+                    if (response.pending_action) {
+                        assistantMessage.content += `\n\n[pending local action]\n${formatPendingActionPreview(response.pending_action)}`;
+                    }
+                    if (allActions.length) {
+                        assistantMessage.content += `\n\n[local actions]\n${summarizeActions(allActions)}`;
+                        const autotuneAction = allActions.find((action) => action.tool === "autotune_settings" && action.status === "ok");
                         if (autotuneAction && autotuneAction.result && autotuneAction.result.recommended_forms) {
                             applyRecommendedForms(autotuneAction.result.recommended_forms);
                             showNotice("The assistant auto-applied updated settings for the next run.", "good");
@@ -4156,7 +5500,7 @@
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            messages: messageHistory,
+                            messages: messageHistoryPayload,
                             temperature: Number(cockpitTemperatureEl.value || 0.2),
                             max_tokens: Number(cockpitMaxTokensEl.value || 512),
                             top_k: Number(cockpitTopKEl.value || 40),
@@ -4216,12 +5560,114 @@
 
         function clearChat() {
             state.chatMessages = [];
+            state.selectedChatMessageIds = [];
             renderChatMessages();
+        }
+
+        function loadTranscriptIntoConversationLab() {
+            try {
+                const loadedMessages = parseTranscriptMessages(sandboxEditorEl.value);
+                state.chatMessages = loadedMessages;
+                state.selectedChatMessageIds = [];
+                renderChatMessages();
+                showNotice(`Loaded ${loadedMessages.length} transcript turn(s) into Conversation Lab.`, "good");
+            } catch (error) {
+                showNotice(error.message, "bad");
+            }
+        }
+
+        function defaultTranscriptPath(extension) {
+            const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+            return `transcripts/conversation-${stamp}.${extension}`;
+        }
+
+        async function exportConversationLab(format) {
+            if (!state.chatMessages.length) {
+                showNotice("There is no Conversation Lab transcript to export yet.", "bad");
+                return;
+            }
+            const messagesToExport = selectedChatMessages();
+            const exportMessages = messagesToExport.length ? messagesToExport : state.chatMessages;
+            const isSft = format === "sft_jsonl";
+            const defaultPath = isSft ? "chat_train.jsonl" : defaultTranscriptPath("json");
+            const promptText = isSft
+                ? "Export this conversation as one SFT JSONL row under assistant_sandbox. Path:"
+                : "Save this conversation transcript under assistant_sandbox. Path:";
+            const path = window.prompt(promptText, defaultPath);
+            if (!path) {
+                showNotice("Transcript export cancelled.", "warn");
+                return;
+            }
+            try {
+                const exportBody = {
+                    path,
+                    format,
+                    mode: isSft ? "append" : "overwrite",
+                    messages: chatMessageApiPayload(exportMessages),
+                };
+                if (isSft) {
+                    const preview = await api("/api/sandbox/chat/export", {
+                        method: "POST",
+                        body: {
+                            ...exportBody,
+                            preview: true,
+                        },
+                    });
+                    chatSelectionMetaEl.textContent = [
+                        `SFT append preview for ${preview.path}`,
+                        `${preview.message_count} turn(s)`,
+                        "",
+                        (preview.content || "").trim(),
+                    ].join("\n");
+                    if (!window.confirm(`Append this ${preview.message_count}-turn SFT row to ${preview.path}?`)) {
+                        showNotice("SFT export cancelled after preview.", "warn");
+                        return;
+                    }
+                }
+                const result = await api("/api/sandbox/chat/export", {
+                    method: "POST",
+                    body: exportBody,
+                });
+                showNotice(
+                    isSft
+                        ? `Exported ${result.message_count} turn(s) to SFT file ${result.path}.`
+                        : `Saved ${result.message_count} turn(s) to ${result.path}.`,
+                    "good",
+                );
+                await refreshBootstrap();
+                await loadSandboxFile(result.path);
+            } catch (error) {
+                showNotice(error.message, "bad");
+            }
         }
 
         function summarizeActions(actions) {
             if (!actions || !actions.length) return "";
             return actions.map((action) => `${action.tool} [${action.status}]`).join(", ");
+        }
+
+        function formatPendingActionPreview(pendingAction) {
+            if (!pendingAction) return "";
+            const preview = pendingAction.preview || {};
+            const lines = [
+                `tool: ${pendingAction.tool}`,
+                `risk: ${preview.risk || "unknown"}`,
+                `summary: ${preview.summary || "No preview available."}`,
+            ];
+            if (preview.path) lines.push(`path: ${preview.path}`);
+            if (preview.source_path) lines.push(`source: ${preview.source_path}`);
+            if (preview.target_path) lines.push(`target: ${preview.target_path}`);
+            if (preview.display_command) lines.push(`command: ${preview.display_command}`);
+            if (preview.preflight && preview.preflight.status) lines.push(`preflight: ${preview.preflight.status}`);
+            if (preview.content_preview) {
+                lines.push("", "content preview:", preview.content_preview);
+            }
+            return lines.join("\n");
+        }
+
+        async function requestAssistantActionApproval(pendingAction) {
+            const previewText = formatPendingActionPreview(pendingAction);
+            return window.confirm(`Approve this local assistant action?\n\n${previewText}`);
         }
 
         async function requestSingleTurnResponse(provider, prompt, options = {}) {
@@ -4363,12 +5809,16 @@
         }
 
         async function initialize() {
+            window.__dashboardInitialized = false;
             initStartupSplash();
             document.querySelectorAll("button").forEach((button) => {
                 button.type = "button";
             });
             document.getElementById("refreshBtn").addEventListener("click", refreshBootstrap);
             document.getElementById("applyTruthPresetBtn").addEventListener("click", () => applyPreset("truth_first_teammate"));
+            document.getElementById("applyRunProfileBtn").addEventListener("click", applyRunProfile);
+            document.getElementById("saveRunProfileBtn").addEventListener("click", saveCurrentRunProfile);
+            runProfileSelectEl.addEventListener("change", renderRunProfiles);
             document.getElementById("saveDesignBtn").addEventListener("click", saveDesign);
             document.getElementById("publishDesignBtn").addEventListener("click", publishDesignAction);
             document.getElementById("draftDesignBtn").addEventListener("click", draftDesignWithRuntime);
@@ -4378,7 +5828,15 @@
             document.getElementById("resumeJobBtn").addEventListener("click", resumeSelectedJob);
             document.getElementById("copyResumeBtn").addEventListener("click", copyResumeFromSelectedJob);
             document.getElementById("useCheckpointBtn").addEventListener("click", useSelectedCheckpointInEvalOrLoad);
+            document.getElementById("copyCommandBtn").addEventListener("click", copyCurrentCommand);
             document.getElementById("stopJobBtn").addEventListener("click", stopSelectedJob);
+            jobLogFilterEl.addEventListener("input", renderJobLogs);
+            jobLogTailLinesEl.addEventListener("input", renderJobLogs);
+            document.getElementById("clearJobLogFilterBtn").addEventListener("click", () => {
+                jobLogFilterEl.value = "";
+                renderJobLogs();
+            });
+            document.getElementById("copyJobLogTailBtn").addEventListener("click", copyJobLogTail);
             document.getElementById("loadChatBtn").addEventListener("click", () => loadChatRuntime());
             document.getElementById("latestSftBtn").addEventListener("click", () => loadChatRuntime({ source: "sft", model_tag: "", step: "", num_gpus: 1 }));
             document.getElementById("latestRlBtn").addEventListener("click", () => loadChatRuntime({ source: "rl", model_tag: "", step: "", num_gpus: 1 }));
@@ -4390,6 +5848,11 @@
             document.getElementById("autoTuneBtn").addEventListener("click", autoTuneSettings);
             document.getElementById("sendChatBtn").addEventListener("click", sendChat);
             document.getElementById("clearChatBtn").addEventListener("click", clearChat);
+            document.getElementById("selectAllChatBtn").addEventListener("click", selectAllChatMessages);
+            document.getElementById("clearChatSelectionBtn").addEventListener("click", clearChatSelection);
+            document.getElementById("loadTranscriptBtn").addEventListener("click", loadTranscriptIntoConversationLab);
+            document.getElementById("saveTranscriptBtn").addEventListener("click", () => exportConversationLab("json"));
+            document.getElementById("exportChatSftBtn").addEventListener("click", () => exportConversationLab("sft_jsonl"));
             document.getElementById("runQuickPromptBtn").addEventListener("click", runQuickPrompt);
             document.getElementById("copyQuickPromptToChatBtn").addEventListener("click", copyQuickPromptToConversationLab);
             document.getElementById("clearQuickPromptBtn").addEventListener("click", clearQuickPrompt);
@@ -4398,18 +5861,36 @@
             document.getElementById("newSandboxFileBtn").addEventListener("click", newSandboxFile);
             document.getElementById("saveSandboxBtn").addEventListener("click", saveSandboxFile);
             document.getElementById("loadSandboxBtn").addEventListener("click", () => loadSandboxFile());
+            document.getElementById("validateSftBtn").addEventListener("click", validateSftDataset);
+            document.getElementById("previewSftExportBtn").addEventListener("click", previewSftExport);
+            document.getElementById("exportSftParquetBtn").addEventListener("click", () => exportSftDataset("parquet"));
+            document.getElementById("normalizeSftJsonlBtn").addEventListener("click", () => exportSftDataset("jsonl"));
+            document.getElementById("splitSftJsonlBtn").addEventListener("click", splitSftDataset);
             document.getElementById("deleteSandboxBtn").addEventListener("click", deleteSandboxFile);
             document.getElementById("saveReplyToSandboxBtn").addEventListener("click", saveLastAssistantReplyToSandbox);
             document.getElementById("refreshCorpusBtn").addEventListener("click", refreshBootstrap);
             document.getElementById("newCorpusFileBtn").addEventListener("click", newCorpusFile);
             document.getElementById("saveCorpusBtn").addEventListener("click", saveCorpusFile);
             document.getElementById("loadCorpusBtn").addEventListener("click", () => loadCorpusFile());
+            document.getElementById("validateCorpusBtn").addEventListener("click", validateCorpusDataset);
+            document.getElementById("inspectCorpusBtn").addEventListener("click", inspectCorpusDocuments);
             document.getElementById("deleteCorpusBtn").addEventListener("click", deleteCorpusFile);
             document.getElementById("copySandboxToCorpusBtn").addEventListener("click", copySelectedSandboxToCorpus);
+            document.getElementById("generateReportBtn").addEventListener("click", generateReport);
+            document.getElementById("resetReportBtn").addEventListener("click", resetReport);
+            document.getElementById("previewParquetBtn").addEventListener("click", previewParquetConversion);
+            document.getElementById("writeParquetBtn").addEventListener("click", writeParquetConversion);
+            document.getElementById("previewCorpusSplitBtn").addEventListener("click", previewCorpusSplit);
+            document.getElementById("writeCorpusSplitBtn").addEventListener("click", writeCorpusSplit);
             corpusPathEl.addEventListener("input", () => {
                 if (corpusPathEl.value.trim() !== state.selectedCorpusPath) {
                     setCorpusEditorMode("text");
                 }
+                renderPathHints();
+            });
+            [sandboxPathEl, document.getElementById("tokenizerCorpusDir"), document.getElementById("baseCorpusDir"), document.getElementById("sftTrainFiles"), document.getElementById("sftValFiles"), document.getElementById("runtimeModelPath")].forEach((field) => {
+                field.addEventListener("input", renderPathHints);
+                field.addEventListener("change", renderPathHints);
             });
             runtimeModelSelectEl.addEventListener("change", () => {
                 const runtimeModelPathEl = document.getElementById("runtimeModelPath");
@@ -4417,6 +5898,7 @@
                     runtimeModelPathEl.value = runtimeModelSelectEl.value;
                 }
                 updateRuntimeModelMeta(state.bootstrap ? state.bootstrap.runtime : null, runtimeModelPathEl.value);
+                renderPathHints();
             });
             document.getElementById("runtimeModelPath").addEventListener("input", () => {
                 if (state.bootstrap && state.bootstrap.runtime) {
@@ -4429,7 +5911,7 @@
                 field.addEventListener("input", saveRuntimeFormSettings);
                 field.addEventListener("change", saveRuntimeFormSettings);
             });
-            [cockpitBackendProfileEl, cockpitTemperatureEl, cockpitTopKEl, cockpitMaxTokensEl, cockpitAssistantActionsEl, cockpitSystemPromptEl].forEach((field) => {
+            [cockpitBackendProfileEl, cockpitTemperatureEl, cockpitTopKEl, cockpitMaxTokensEl, cockpitAssistantActionsEl, cockpitActionReviewEl, cockpitSystemPromptEl].forEach((field) => {
                 field.addEventListener("input", renderCockpitStatus);
                 field.addEventListener("change", renderCockpitStatus);
                 field.addEventListener("input", saveCockpitSettings);
@@ -4458,8 +5940,12 @@
             chatProviderEl.addEventListener("change", renderCockpitStatus);
             quickPromptProviderEl.addEventListener("change", renderCockpitStatus);
             assistantToolsEnabledEl.addEventListener("change", renderCockpitStatus);
+            assistantActionModeEl.addEventListener("change", renderCockpitStatus);
             document.querySelectorAll("[data-job]").forEach((button) => {
                 button.addEventListener("click", () => launchJob(button.dataset.job, button.dataset.form || null));
+            });
+            document.querySelectorAll("[data-preview-job]").forEach((button) => {
+                button.addEventListener("click", () => previewJobCommand(button.dataset.previewJob, button.dataset.form || null));
             });
 
             await refreshBootstrap();
@@ -4471,6 +5957,7 @@
             applyCockpitSettings({ silent: true });
             renderCockpitStatus();
             renderQuickPromptAuthorityNote();
+            window.__dashboardInitialized = true;
 
             state.pollingHandle = window.setInterval(async () => {
                 try {

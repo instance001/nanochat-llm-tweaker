@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,8 @@ try:
 except ImportError:
     pa = None
     pq = None
+
+PARQUET_INSTALL_HINT = "Install parquet support with `uv sync --extra parquet` from nanochat-master."
 
 
 class WorkspaceManager:
@@ -155,6 +158,105 @@ class SandboxManager(WorkspaceManager):
     def __init__(self, root: str | os.PathLike[str], activity_log=None):
         super().__init__(root=root, workspace_name="assistant_sandbox", event_prefix="sandbox", activity_log=activity_log)
 
+    def list_files(self) -> list[dict[str, Any]]:
+        files = []
+        if not self.root.exists():
+            return files
+        for path in sorted(self.root.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(self.root).as_posix()
+            item = {
+                "path": relative,
+                "size": path.stat().st_size,
+                "updated_at": path.stat().st_mtime,
+                "kind": self._detect_kind(path),
+            }
+            if item["kind"] == "parquet":
+                try:
+                    item.update(self._parquet_summary(path))
+                except RuntimeError as exc:
+                    item["preview_error"] = str(exc)
+            files.append(item)
+        return files
+
+    def _detect_kind(self, path: Path) -> str:
+        suffix = path.suffix.lower()
+        if suffix == ".parquet":
+            return "parquet"
+        if suffix == ".json":
+            return "json"
+        if suffix == ".jsonl":
+            return "jsonl"
+        return "text"
+
+    def _require_pyarrow(self) -> None:
+        if pq is None or pa is None:
+            raise RuntimeError(f"Parquet support requires pyarrow, but it is not installed locally. {PARQUET_INSTALL_HINT}")
+
+    def _parquet_summary(self, path: Path) -> dict[str, Any]:
+        self._require_pyarrow()
+        parquet_file = pq.ParquetFile(path)
+        row_count = parquet_file.metadata.num_rows if parquet_file.metadata is not None else None
+        column_names = parquet_file.schema.names if parquet_file.schema is not None else []
+        return {
+            "row_count": row_count,
+            "column_count": len(column_names),
+            "columns": column_names,
+        }
+
+    def _read_parquet_file(self, relative_path: str, log_event: bool) -> dict[str, Any]:
+        path = self._resolve_path(relative_path)
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(relative_path)
+        self._require_pyarrow()
+        parquet_file = pq.ParquetFile(path)
+        sample_rows = []
+        if parquet_file.num_row_groups > 0:
+            sample_table = parquet_file.read_row_group(0)
+            sample_rows = sample_table.slice(0, min(12, sample_table.num_rows)).to_pylist()
+        preview = json.dumps(sample_rows, ensure_ascii=True, indent=2)
+        result = {
+            "path": path.relative_to(self.root).as_posix(),
+            "kind": "parquet",
+            "size": path.stat().st_size,
+            "updated_at": path.stat().st_mtime,
+            "row_count": parquet_file.metadata.num_rows if parquet_file.metadata is not None else 0,
+            "row_group_count": parquet_file.num_row_groups,
+            "column_count": len(parquet_file.schema.names),
+            "columns": parquet_file.schema.names,
+            "schema": str(parquet_file.schema_arrow),
+            "sample_rows": sample_rows,
+            "preview": preview,
+            "content": preview,
+            "editable_as_text": False,
+        }
+        if log_event:
+            self._log(
+                f"{self.event_prefix}_read",
+                f"Read {self.workspace_name} parquet file {result['path']}",
+                {"path": result["path"], "size": result["size"], "row_count": result["row_count"]},
+            )
+        return result
+
+    def read_file(self, relative_path: str) -> dict[str, Any]:
+        path = self._resolve_path(relative_path)
+        if path.suffix.lower() == ".parquet":
+            return self._read_parquet_file(path.relative_to(self.root).as_posix(), log_event=True)
+        result = super().read_file(relative_path)
+        result["kind"] = self._detect_kind(path)
+        result["editable_as_text"] = True
+        return result
+
+    def write_file(self, relative_path: str, content: str) -> dict[str, Any]:
+        path = self._resolve_path(relative_path)
+        if path.suffix.lower() == ".parquet":
+            raise ValueError("Sandbox parquet files must be written through an export action, not plain text.")
+        result = super().write_file(relative_path, content)
+        result["kind"] = self._detect_kind(path)
+        result["editable_as_text"] = True
+        return result
+
 
 class CorpusManager(WorkspaceManager):
     def __init__(self, root: str | os.PathLike[str], activity_log=None):
@@ -195,7 +297,7 @@ class CorpusManager(WorkspaceManager):
     def _require_pyarrow(self) -> None:
         if pq is None or pa is None:
             raise RuntimeError(
-                "Parquet support requires pyarrow, but it is not installed locally."
+                f"Parquet support requires pyarrow, but it is not installed locally. {PARQUET_INSTALL_HINT}"
             )
 
     def _parquet_summary(self, path: Path) -> dict[str, Any]:
@@ -291,6 +393,268 @@ class CorpusManager(WorkspaceManager):
         if not parsed_records:
             raise ValueError("Parquet corpus writes require at least one JSON object record.")
         return parsed_records
+
+    def convert_content_to_parquet_records(
+        self,
+        content: str,
+        conversion_mode: str = "paragraphs",
+        source: str = "dashboard",
+    ) -> dict[str, Any]:
+        text = str(content or "")
+        normalized_mode = (conversion_mode or "paragraphs").strip().lower().replace("-", "_")
+        if normalized_mode in {"paragraph", "paragraphs"}:
+            records, rejected = self._records_from_paragraphs(text, source)
+        elif normalized_mode in {"line", "lines"}:
+            records, rejected = self._records_from_lines(text, source)
+        elif normalized_mode in {"markdown", "markdown_sections", "heading_sections"}:
+            records, rejected = self._records_from_markdown_sections(text, source)
+        elif normalized_mode in {"jsonl", "json_lines"}:
+            records = self._parse_jsonl_records(text)
+            rejected = 0
+        elif normalized_mode in {"json", "json_array", "json_object"}:
+            records = self._parse_json_records(text)
+            rejected = 0
+        else:
+            raise ValueError(
+                "Unsupported parquet conversion mode. Use paragraphs, lines, markdown_sections, jsonl, or json_array."
+            )
+        if not records:
+            raise ValueError("Parquet conversion produced no records. Add usable text or structured rows first.")
+        columns = sorted({key for record in records for key in record.keys()})
+        return {
+            "conversion_mode": normalized_mode,
+            "row_count": len(records),
+            "column_count": len(columns),
+            "columns": columns,
+            "sample_rows": records[:12],
+            "rejected_empty_rows": rejected,
+            "records": records,
+        }
+
+    def preview_parquet_conversion(
+        self,
+        content: str,
+        conversion_mode: str = "paragraphs",
+        source: str = "dashboard",
+    ) -> dict[str, Any]:
+        payload = self.convert_content_to_parquet_records(content, conversion_mode=conversion_mode, source=source)
+        preview = dict(payload)
+        preview.pop("records", None)
+        return preview
+
+    def split_content(
+        self,
+        content: str,
+        split_mode: str = "paragraphs",
+        val_ratio: float = 0.1,
+        seed: int = 1337,
+    ) -> dict[str, Any]:
+        if val_ratio <= 0 or val_ratio >= 1:
+            raise ValueError("val_ratio must be greater than 0 and less than 1.")
+        mode = (split_mode or "paragraphs").strip().lower().replace("-", "_")
+        items = self._split_items_from_content(content, mode)
+        if not items:
+            raise ValueError("Corpus split produced no records. Add usable content first.")
+        indexed = list(enumerate(items))
+        rng = random.Random(seed)
+        rng.shuffle(indexed)
+        if len(indexed) == 1:
+            val_count = 0
+        else:
+            val_count = max(1, round(len(indexed) * val_ratio))
+            val_count = min(val_count, len(indexed) - 1)
+        val_items = indexed[:val_count]
+        train_items = indexed[val_count:]
+        train_values = [item for _, item in train_items]
+        val_values = [item for _, item in val_items]
+        return {
+            "split_mode": mode,
+            "record_count": len(items),
+            "train_count": len(train_values),
+            "val_count": len(val_values),
+            "train_indices": [index for index, _ in train_items],
+            "val_indices": [index for index, _ in val_items],
+            "val_ratio": val_ratio,
+            "seed": seed,
+            "train_content": self._serialize_split_items(train_values, mode),
+            "val_content": self._serialize_split_items(val_values, mode),
+            "sample_train": train_values[:5],
+            "sample_val": val_values[:5],
+        }
+
+    def preview_split_content(
+        self,
+        content: str,
+        split_mode: str = "paragraphs",
+        val_ratio: float = 0.1,
+        seed: int = 1337,
+    ) -> dict[str, Any]:
+        payload = self.split_content(content, split_mode=split_mode, val_ratio=val_ratio, seed=seed)
+        preview = dict(payload)
+        preview.pop("train_content", None)
+        preview.pop("val_content", None)
+        return preview
+
+    def write_split_files(
+        self,
+        train_path: str,
+        val_path: str,
+        content: str,
+        split_mode: str = "paragraphs",
+        val_ratio: float = 0.1,
+        seed: int = 1337,
+    ) -> dict[str, Any]:
+        payload = self.split_content(content, split_mode=split_mode, val_ratio=val_ratio, seed=seed)
+        train_result = self.write_file(train_path, payload["train_content"])
+        val_result = self.write_file(val_path, payload["val_content"]) if payload["val_count"] else {
+            "path": val_path,
+            "size": 0,
+            "updated_at": None,
+        }
+        return {
+            **payload,
+            "train_path": train_result["path"],
+            "val_path": val_result["path"],
+            "train_size": train_result["size"],
+            "val_size": val_result["size"],
+            "updated_at": max(
+                updated_at for updated_at in [train_result["updated_at"], val_result["updated_at"]] if updated_at is not None
+            ),
+        }
+
+    def write_converted_parquet_file(
+        self,
+        relative_path: str,
+        content: str,
+        conversion_mode: str = "paragraphs",
+        mode: str = "overwrite",
+        source: str = "dashboard",
+    ) -> dict[str, Any]:
+        payload = self.convert_content_to_parquet_records(content, conversion_mode=conversion_mode, source=source)
+        result = self.write_parquet_file(relative_path, payload["records"], mode=mode)
+        result["conversion"] = {
+            "conversion_mode": payload["conversion_mode"],
+            "rejected_empty_rows": payload["rejected_empty_rows"],
+        }
+        return result
+
+    def _records_from_paragraphs(self, text: str, source: str) -> tuple[list[dict[str, Any]], int]:
+        chunks = [chunk.strip() for chunk in text.replace("\r\n", "\n").split("\n\n")]
+        return self._text_records_from_chunks(chunks, source)
+
+    def _records_from_lines(self, text: str, source: str) -> tuple[list[dict[str, Any]], int]:
+        chunks = [line.strip() for line in text.splitlines()]
+        return self._text_records_from_chunks(chunks, source)
+
+    def _records_from_markdown_sections(self, text: str, source: str) -> tuple[list[dict[str, Any]], int]:
+        sections: list[dict[str, Any]] = []
+        current_heading = ""
+        current_lines: list[str] = []
+        rejected = 0
+
+        def flush() -> None:
+            nonlocal rejected
+            body = "\n".join(current_lines).strip()
+            heading = current_heading.strip()
+            if not heading and not body:
+                rejected += 1
+                return
+            section_text = f"{heading}\n\n{body}".strip() if heading else body
+            if not section_text:
+                rejected += 1
+                return
+            sections.append(
+                {
+                    "text": section_text,
+                    "heading": heading,
+                    "source": source,
+                    "row_index": len(sections),
+                }
+            )
+
+        for raw_line in text.replace("\r\n", "\n").splitlines():
+            line = raw_line.rstrip()
+            if line.startswith("#"):
+                marker, _, title = line.partition(" ")
+                if marker and all(char == "#" for char in marker):
+                    flush()
+                    current_heading = title.strip() or marker
+                    current_lines = []
+                    continue
+            current_lines.append(line)
+        flush()
+        return sections, rejected
+
+    def _text_records_from_chunks(self, chunks: list[str], source: str) -> tuple[list[dict[str, Any]], int]:
+        records = []
+        rejected = 0
+        for chunk in chunks:
+            normalized = chunk.strip()
+            if not normalized:
+                rejected += 1
+                continue
+            records.append(
+                {
+                    "text": normalized,
+                    "source": source,
+                    "row_index": len(records),
+                }
+            )
+        return records, rejected
+
+    def _split_items_from_content(self, content: str, mode: str) -> list[Any]:
+        text = str(content or "")
+        if mode in {"paragraph", "paragraphs"}:
+            return [chunk.strip() for chunk in text.replace("\r\n", "\n").split("\n\n") if chunk.strip()]
+        if mode in {"line", "lines"}:
+            return [line.strip() for line in text.splitlines() if line.strip()]
+        if mode in {"markdown", "markdown_sections", "heading_sections"}:
+            records, _ = self._records_from_markdown_sections(text, source="split")
+            return [record["text"] for record in records]
+        if mode in {"jsonl", "json_lines"}:
+            return self._parse_jsonl_records(text)
+        if mode in {"json", "json_array", "json_object"}:
+            return self._parse_json_records(text)
+        raise ValueError("Unsupported corpus split mode. Use paragraphs, lines, markdown_sections, jsonl, or json_array.")
+
+    def _serialize_split_items(self, items: list[Any], mode: str) -> str:
+        if not items:
+            return ""
+        if mode in {"jsonl", "json_lines", "json", "json_array", "json_object"}:
+            return "\n".join(json.dumps(item, ensure_ascii=True) for item in items) + "\n"
+        separator = "\n" if mode in {"line", "lines"} else "\n\n"
+        return separator.join(str(item).strip() for item in items if str(item).strip()) + "\n"
+
+    def _parse_json_records(self, text: str) -> list[dict[str, Any]]:
+        stripped = text.strip()
+        if not stripped:
+            raise ValueError("JSON parquet conversion requires a JSON object or array of objects.")
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError("JSON parquet conversion requires valid JSON.") from exc
+        if isinstance(payload, dict):
+            return [payload]
+        if isinstance(payload, list) and all(isinstance(record, dict) for record in payload):
+            return payload
+        raise ValueError("JSON parquet conversion requires a JSON object or an array of objects.")
+
+    def _parse_jsonl_records(self, text: str) -> list[dict[str, Any]]:
+        records = []
+        for line_number, raw_line in enumerate(text.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"JSONL parquet conversion failed on line {line_number}.") from exc
+            if not isinstance(payload, dict):
+                raise ValueError(f"JSONL parquet conversion line {line_number} must be a JSON object.")
+            records.append(payload)
+        if not records:
+            raise ValueError("JSONL parquet conversion requires at least one JSON object line.")
+        return records
 
     def write_from_content(self, relative_path: str, content: str, mode: str = "overwrite") -> dict[str, Any]:
         path = self._resolve_path(relative_path)

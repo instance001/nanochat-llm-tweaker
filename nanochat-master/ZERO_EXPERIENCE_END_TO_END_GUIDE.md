@@ -114,7 +114,64 @@ If it says Python is not found, search Google for:
 
 This builder will create a local `.venv`, but it does not automatically download missing packages for you.
 
-Open PowerShell in `nanochat-master/` and run:
+The recommended beginner path is to use `uv`.
+
+If `uv` is not installed yet, run:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Close and reopen PowerShell, then check:
+
+```powershell
+uv --version
+```
+
+Open PowerShell in `nanochat-master/`.
+
+For most Windows machines, including AMD Windows boxes, run:
+
+```powershell
+uv sync --extra cpu --extra parquet
+```
+
+This installs the CPU training path and parquet support.
+
+On AMD Windows, this is expected:
+
+```powershell
+uv run python -c "import torch; print(torch.__version__); print('CUDA:', torch.cuda.is_available())"
+```
+
+Expected result:
+
+```text
+2.9.1+cpu
+CUDA: False
+```
+
+CUDA is NVIDIA-only. `CUDA: False` is normal for an AMD Windows box using this local CPU training setup.
+
+Confirm parquet support:
+
+```powershell
+uv run python -c "import pyarrow; print(pyarrow.__version__)"
+```
+
+If you have an NVIDIA GPU and want CUDA training, use:
+
+```powershell
+uv sync --extra gpu --extra parquet
+```
+
+If you do not want parquet support, use:
+
+```powershell
+uv sync --extra cpu
+```
+
+Manual pip fallback:
 
 ```powershell
 python -m venv .venv --system-site-packages
@@ -123,7 +180,7 @@ python -m pip install --upgrade pip
 python -m pip install fastapi uvicorn psutil python-dotenv regex rustbpe scipy setuptools tabulate tiktoken tokenizers transformers zstandard datasets matplotlib ipykernel kernels
 ```
 
-If you want local `.parquet` corpus support, also install:
+If you are installing packages manually with `pip`, install:
 
 ```powershell
 python -m pip install pyarrow
@@ -146,7 +203,7 @@ Why this matters:
 - some local CPU training paths rely on a working Windows C/C++ toolchain
 - without it, training can fail later even if Python packages installed correctly
 
-If you want to run training inside this same environment, install PyTorch too.
+If you want to run training inside a manual pip environment, install PyTorch too.
 
 CPU-only example:
 
@@ -889,7 +946,7 @@ Needed:
 
 Optional:
 
-- `pyarrow` for `.parquet`
+- the `parquet` extra for `.parquet`
 - optional but recommended on Windows CPU training paths: Visual Studio Build Tools with Desktop C++
 
 ### To Train The Base Model
@@ -913,9 +970,15 @@ Needed:
 
 Needed:
 
-- `pyarrow`
+- the `parquet` extra, which installs `pyarrow`
 
-Install command:
+Preferred install command from `nanochat-master/`:
+
+```powershell
+uv sync --extra parquet
+```
+
+Manual pip fallback:
 
 ```powershell
 python -m pip install pyarrow
@@ -954,8 +1017,10 @@ Fix:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m pip install pyarrow
+uv sync --extra parquet
 ```
+
+If you are not using `uv`, run `python -m pip install pyarrow` inside the active environment.
 
 If training later fails on Windows compile/build steps instead of Python imports, search for:
 

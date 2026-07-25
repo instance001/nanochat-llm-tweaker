@@ -28,7 +28,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.0",
     "pytest>=8.0.0",
+    "tomli>=2.0.0; python_version < '3.11'",
 ]
 
 [tool.pytest.ini_options]
@@ -63,6 +65,12 @@ cpu = [
 ]
 gpu = [
     "torch==2.9.1",
+]
+parquet = [
+    "pyarrow>=18.0.0",
+]
+browser-tests = [
+    "playwright>=1.54.0",
 ]
 
 [tool.uv]

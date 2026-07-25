@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from copy import deepcopy
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +35,113 @@ ASSISTANT_SANDBOX_DIR = REPO_ROOT / "assistant_sandbox"
 DEFAULT_CHAT_TRAIN_FILE = ASSISTANT_SANDBOX_DIR / "chat_train.jsonl"
 DEFAULT_CHAT_VAL_FILE = ASSISTANT_SANDBOX_DIR / "chat_val.jsonl"
 JOB_LOG_LIMIT = 2000
+JOB_HISTORY_LIMIT = 200
+JOBS_FILE = REPO_ROOT / "builder_logs" / "jobs.json"
+
+
+DASHBOARD_JOB_SCRIPT_MODULES = {
+    "tokenizer_train": "scripts.tok_train",
+    "tokenizer_eval": "scripts.tok_eval",
+    "base_train": "scripts.base_train",
+    "base_eval": "scripts.base_eval",
+    "benchmark_eval": "scripts.base_eval",
+    "chat_sft": "scripts.chat_sft",
+    "chat_rl": "scripts.chat_rl",
+    "chat_eval": "scripts.chat_eval",
+}
+
+DASHBOARD_JOB_PARAM_NAMES = {
+    "tokenizer_train": {"corpus_dir", "max_chars", "doc_cap", "vocab_size"},
+    "tokenizer_eval": {"corpus_dir", "max_corpus_docs"},
+    "base_train": {
+        "run",
+        "device_type",
+        "fp8",
+        "fp8_recipe",
+        "depth",
+        "aspect_ratio",
+        "head_dim",
+        "max_seq_len",
+        "window_pattern",
+        "num_iterations",
+        "target_flops",
+        "target_param_data_ratio",
+        "device_batch_size",
+        "total_batch_size",
+        "embedding_lr",
+        "unembedding_lr",
+        "weight_decay",
+        "matrix_lr",
+        "scalar_lr",
+        "adam_beta1",
+        "adam_beta2",
+        "warmup_ratio",
+        "warmdown_ratio",
+        "final_lr_frac",
+        "resume_from_step",
+        "eval_every",
+        "eval_tokens",
+        "core_metric_every",
+        "core_metric_max_per_task",
+        "sample_every",
+        "save_every",
+        "model_tag",
+        "corpus_dir",
+    },
+    "base_eval": {"eval", "model_tag", "step", "max_per_task", "device_batch_size", "split_tokens", "device_type", "corpus_dir"},
+    "benchmark_eval": {"eval", "model_tag", "step", "max_per_task", "device_batch_size", "split_tokens", "device_type", "corpus_dir"},
+    "chat_sft": {
+        "run",
+        "device_type",
+        "model_tag",
+        "model_step",
+        "load_optimizer",
+        "resume_from_step",
+        "num_iterations",
+        "max_seq_len",
+        "device_batch_size",
+        "total_batch_size",
+        "embedding_lr",
+        "unembedding_lr",
+        "matrix_lr",
+        "init_lr_frac",
+        "warmup_ratio",
+        "warmdown_ratio",
+        "final_lr_frac",
+        "eval_every",
+        "eval_tokens",
+        "chatcore_every",
+        "save_every",
+        "train_files",
+        "val_files",
+        "identity_file",
+        "include_identity",
+        "identity_repeats",
+    },
+    "chat_rl": {
+        "run",
+        "device_type",
+        "model_tag",
+        "model_step",
+        "resume_from_step",
+        "num_epochs",
+        "device_batch_size",
+        "examples_per_step",
+        "num_samples",
+        "max_new_tokens",
+        "temperature",
+        "top_k",
+        "embedding_lr",
+        "unembedding_lr",
+        "matrix_lr",
+        "weight_decay",
+        "init_lr_frac",
+        "eval_every",
+        "eval_examples",
+        "save_every",
+    },
+    "chat_eval": {"source", "task_name", "temperature", "max_new_tokens", "num_samples", "top_k", "batch_size", "model_tag", "step", "max_problems", "device_type"},
+}
 
 
 GUIDED_PRESETS = {
@@ -153,6 +261,329 @@ GUIDED_PRESETS = {
         },
     },
 }
+
+
+RUN_PROFILES = {
+    "tiny_smoke": {
+        "label": "Tiny Smoke Test",
+        "summary": "Fastest possible local pipeline check with tiny iteration counts.",
+        "forms": {
+            "tokenizerForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "max_chars": 10_000_000,
+                "doc_cap": 1_000,
+                "vocab_size": 8192,
+            },
+            "baseTrainForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "depth": 2,
+                "head_dim": 64,
+                "max_seq_len": 256,
+                "device_batch_size": 2,
+                "total_batch_size": 1024,
+                "num_iterations": 40,
+                "eval_every": 20,
+                "eval_tokens": 32768,
+                "sample_every": 20,
+                "save_every": 20,
+                "run": "tiny-smoke-base",
+                "device_type": "cpu",
+            },
+            "chatSftForm": {
+                "train_files": str(DEFAULT_CHAT_TRAIN_FILE),
+                "val_files": str(DEFAULT_CHAT_VAL_FILE),
+                "include_identity": 1,
+                "identity_repeats": 1,
+                "max_seq_len": 256,
+                "device_batch_size": 2,
+                "total_batch_size": 1024,
+                "num_iterations": 40,
+                "eval_every": 20,
+                "eval_tokens": 32768,
+                "save_every": 20,
+                "run": "tiny-smoke-sft",
+                "device_type": "cpu",
+            },
+            "baseEvalForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "eval": "bpb,sample",
+                "device_batch_size": 2,
+                "split_tokens": 32768,
+                "max_per_task": 16,
+                "device_type": "cpu",
+            },
+            "chatRlForm": {
+                "num_epochs": 1,
+                "device_batch_size": 2,
+                "total_batch_size": 1024,
+                "save_every": 20,
+                "device_type": "cpu",
+            },
+            "chatEvalForm": {
+                "source": "sft",
+                "task_name": "GSM8K",
+                "limit": 16,
+                "device_type": "cpu",
+            },
+        },
+    },
+    "laptop_overnight": {
+        "label": "Laptop Overnight",
+        "summary": "Conservative CPU-oriented settings for a longer unattended local run.",
+        "forms": {
+            "tokenizerForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "max_chars": 100_000_000,
+                "doc_cap": 10_000,
+                "vocab_size": 16384,
+            },
+            "baseTrainForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "depth": 4,
+                "head_dim": 64,
+                "max_seq_len": 512,
+                "device_batch_size": 4,
+                "total_batch_size": 4096,
+                "num_iterations": 800,
+                "eval_every": 100,
+                "eval_tokens": 131072,
+                "sample_every": 100,
+                "save_every": 100,
+                "run": "laptop-overnight-base",
+                "device_type": "cpu",
+            },
+            "chatSftForm": {
+                "train_files": str(DEFAULT_CHAT_TRAIN_FILE),
+                "val_files": str(DEFAULT_CHAT_VAL_FILE),
+                "include_identity": 1,
+                "identity_repeats": 2,
+                "max_seq_len": 512,
+                "device_batch_size": 4,
+                "total_batch_size": 4096,
+                "num_iterations": 600,
+                "eval_every": 100,
+                "eval_tokens": 131072,
+                "save_every": 100,
+                "run": "laptop-overnight-sft",
+                "device_type": "cpu",
+            },
+            "baseEvalForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "eval": "bpb,sample",
+                "device_batch_size": 4,
+                "split_tokens": 131072,
+                "max_per_task": 64,
+                "device_type": "cpu",
+            },
+        },
+    },
+    "gpu_prototype": {
+        "label": "GPU Prototype",
+        "summary": "Moderate starter settings for a consumer GPU prototype run.",
+        "forms": {
+            "tokenizerForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "max_chars": 250_000_000,
+                "doc_cap": 25_000,
+                "vocab_size": 32768,
+            },
+            "baseTrainForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "depth": 6,
+                "head_dim": 64,
+                "max_seq_len": 768,
+                "device_batch_size": 8,
+                "total_batch_size": 8192,
+                "num_iterations": 1200,
+                "eval_every": 100,
+                "eval_tokens": 262144,
+                "sample_every": 100,
+                "save_every": 100,
+                "run": "gpu-prototype-base",
+                "device_type": "cuda",
+            },
+            "chatSftForm": {
+                "train_files": str(DEFAULT_CHAT_TRAIN_FILE),
+                "val_files": str(DEFAULT_CHAT_VAL_FILE),
+                "include_identity": 1,
+                "identity_repeats": 2,
+                "max_seq_len": 768,
+                "device_batch_size": 8,
+                "total_batch_size": 8192,
+                "num_iterations": 900,
+                "eval_every": 100,
+                "eval_tokens": 262144,
+                "save_every": 100,
+                "run": "gpu-prototype-sft",
+                "device_type": "cuda",
+            },
+            "runtimeForm": {
+                "ctx_size": 8192,
+                "threads": 8,
+                "threads_http": 4,
+                "parallel": 2,
+                "device_strategy": "gpu",
+                "gpu_layers": "auto",
+            },
+        },
+    },
+    "serious_run": {
+        "label": "Serious Run",
+        "summary": "Larger local settings for when corpus and hardware are ready.",
+        "forms": {
+            "tokenizerForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "max_chars": 1_000_000_000,
+                "doc_cap": 100_000,
+                "vocab_size": 32768,
+            },
+            "baseTrainForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "depth": 8,
+                "head_dim": 96,
+                "max_seq_len": 1024,
+                "device_batch_size": 8,
+                "total_batch_size": 16384,
+                "num_iterations": 5000,
+                "eval_every": 250,
+                "eval_tokens": 524288,
+                "sample_every": 250,
+                "save_every": 250,
+                "run": "serious-base",
+                "device_type": "cuda",
+            },
+            "chatSftForm": {
+                "train_files": str(DEFAULT_CHAT_TRAIN_FILE),
+                "val_files": str(DEFAULT_CHAT_VAL_FILE),
+                "include_identity": 1,
+                "identity_repeats": 2,
+                "max_seq_len": 1024,
+                "device_batch_size": 8,
+                "total_batch_size": 16384,
+                "num_iterations": 2500,
+                "eval_every": 250,
+                "eval_tokens": 524288,
+                "save_every": 250,
+                "run": "serious-sft",
+                "device_type": "cuda",
+            },
+            "baseEvalForm": {
+                "corpus_dir": str(LOCAL_CORPUS_DIR),
+                "eval": "bpb,sample",
+                "device_batch_size": 8,
+                "split_tokens": 524288,
+                "max_per_task": 256,
+                "device_type": "cuda",
+            },
+            "runtimeForm": {
+                "ctx_size": 12288,
+                "threads": 12,
+                "threads_http": 4,
+                "parallel": 4,
+                "device_strategy": "gpu",
+                "gpu_layers": "auto",
+            },
+        },
+    },
+}
+
+
+def run_profiles() -> dict[str, Any]:
+    return deepcopy(RUN_PROFILES)
+
+
+def _number_param(params: dict[str, Any], name: str) -> float | None:
+    value = params.get(name)
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def validate_job_params(job_type: str, params: dict[str, Any], hardware_profile: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add(status: str, field: str, message: str, detail: str = "") -> None:
+        checks.append({"status": status, "field": field, "message": message, "detail": detail})
+
+    device_type = str(params.get("device_type") or "cpu").lower()
+    max_seq_len = _number_param(params, "max_seq_len")
+    device_batch = _number_param(params, "device_batch_size")
+    total_batch = _number_param(params, "total_batch_size")
+    num_iterations = _number_param(params, "num_iterations")
+    save_every = _number_param(params, "save_every")
+    eval_tokens = _number_param(params, "eval_tokens")
+
+    if max_seq_len is not None:
+        if max_seq_len < 64:
+            add("error", "max_seq_len", "Max sequence length must be at least 64.")
+        if int(max_seq_len) % 64 != 0:
+            add("warning", "max_seq_len", "Max sequence length is usually safest as a multiple of 64.")
+        if device_type == "cpu" and max_seq_len > 512:
+            add("warning", "max_seq_len", "Sequence length above 512 can make CPU runs very slow.", "Use a tiny/laptop profile unless this is intentional.")
+        if max_seq_len > 2048:
+            add("warning", "max_seq_len", "Very long sequence lengths can sharply increase memory use.")
+
+    if device_batch is not None:
+        if device_batch < 1:
+            add("error", "device_batch_size", "Device batch size must be at least 1.")
+        if device_type == "cpu" and device_batch > 4:
+            add("warning", "device_batch_size", "Device batch size above 4 is usually heavy for CPU training.")
+        if device_type == "cuda" and device_batch > 16:
+            add("warning", "device_batch_size", "Device batch size above 16 may exceed consumer GPU memory.")
+
+    if total_batch is not None:
+        if total_batch < 1:
+            add("error", "total_batch_size", "Total batch size must be at least 1.")
+        if device_batch is not None and total_batch < device_batch:
+            add("error", "total_batch_size", "Total batch size cannot be smaller than device batch size.")
+        if device_batch is not None and total_batch >= 1 and device_batch >= 1 and int(total_batch) % int(device_batch) != 0:
+            add("warning", "total_batch_size", "Total batch size is not divisible by device batch size.")
+
+    if eval_tokens is not None:
+        if eval_tokens < 0:
+            add("error", "eval_tokens", "Eval tokens cannot be negative.")
+        if eval_tokens > 1_000_000:
+            add("warning", "eval_tokens", "Large eval token counts can dominate short runs.")
+
+    if save_every is not None:
+        if save_every < 1:
+            add("error", "save_every", "Save Every must be positive when set.")
+        if num_iterations is not None and save_every > num_iterations:
+            add("warning", "save_every", "Save Every is larger than total iterations, so this run may not produce an intermediate resume checkpoint.")
+
+    for name in ("embedding_lr", "unembedding_lr", "matrix_lr", "scalar_lr"):
+        value = _number_param(params, name)
+        if value is None:
+            continue
+        if value <= 0:
+            add("error", name, f"{name.replace('_', ' ').title()} must be positive when set.")
+        elif value > 1:
+            add("warning", name, f"{name.replace('_', ' ').title()} is unusually high.")
+
+    for name in ("warmup_ratio", "warmdown_ratio", "init_lr_frac", "final_lr_frac", "adam_beta1", "adam_beta2"):
+        value = _number_param(params, name)
+        if value is None:
+            continue
+        if value < 0 or value > 1:
+            add("error", name, f"{name.replace('_', ' ').title()} should be between 0 and 1.")
+
+    fp8_enabled = params.get("fp8") in {1, "1", True, "true", "True"}
+    if fp8_enabled and device_type != "cuda":
+        add("warning", "fp8", "FP8 training is intended for CUDA hardware.", "Disable FP8 for CPU/MPS runs.")
+
+    error_count = sum(1 for check in checks if check["status"] == "error")
+    warning_count = sum(1 for check in checks if check["status"] == "warning")
+    return {
+        "ok": error_count == 0,
+        "job_type": job_type,
+        "checks": checks,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "hardware_tier": (hardware_profile or {}).get("tier"),
+    }
 
 
 def slugify(value: str) -> str:
@@ -406,6 +837,53 @@ def publish_design(slug: str) -> dict[str, Any]:
         "identity_file": str(IDENTITY_FILE),
         "backup_file": str(backup_path) if backup_path else None,
     }
+
+
+def command_diff_summary(original: list[str], updated: list[str]) -> dict[str, Any]:
+    original_tokens = [str(token) for token in original]
+    updated_tokens = [str(token) for token in updated]
+    added = []
+    removed = []
+    changed = []
+    original_flags = _command_flag_map(original_tokens)
+    updated_flags = _command_flag_map(updated_tokens)
+    for flag, value in sorted(updated_flags.items()):
+        if flag not in original_flags:
+            added.append({"flag": flag, "value": value})
+        elif original_flags[flag] != value:
+            changed.append({"flag": flag, "from": original_flags[flag], "to": value})
+    for flag, value in sorted(original_flags.items()):
+        if flag not in updated_flags:
+            removed.append({"flag": flag, "value": value})
+    return {
+        "original": subprocess.list2cmdline(original_tokens),
+        "updated": subprocess.list2cmdline(updated_tokens),
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+        "same_prefix": original_tokens[:2] == updated_tokens[:2],
+    }
+
+
+def _command_flag_map(tokens: list[str]) -> dict[str, str]:
+    flags: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        if "=" in token:
+            flag, value = token.split("=", 1)
+            flags[flag] = value
+            index += 1
+        elif index + 1 < len(tokens) and not tokens[index + 1].startswith("--"):
+            flags[token] = tokens[index + 1]
+            index += 2
+        else:
+            flags[token] = "true"
+            index += 1
+    return flags
 
 
 def _summarize_checkpoints(path: Path) -> dict[str, Any]:
@@ -752,6 +1230,7 @@ def builder_state() -> dict[str, Any]:
         },
         "designs": designs,
         "guided_presets": GUIDED_PRESETS,
+        "run_profiles": run_profiles(),
     }
 
 
@@ -935,6 +1414,138 @@ def build_job_command(job_type: str, params: dict[str, Any]) -> list[str]:
     return command
 
 
+def _failure_evidence(lines: list[str], patterns: list[str], limit: int = 3) -> list[str]:
+    evidence: list[str] = []
+    compiled = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+    for line in lines:
+        text = str(line).strip()
+        if not text:
+            continue
+        if any(pattern.search(text) for pattern in compiled):
+            evidence.append(text[:260])
+            if len(evidence) >= limit:
+                break
+    return evidence
+
+
+def diagnose_job_failure(
+    job_type: str,
+    status: str,
+    command: list[str] | str,
+    log_lines: list[str],
+    metrics: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Return a friendly diagnosis for common failed dashboard jobs."""
+    if status != "failed":
+        return None
+    display_command = subprocess.list2cmdline(command) if isinstance(command, list) else str(command)
+    lines = [display_command, *[str(line) for line in log_lines]]
+    combined = "\n".join(lines).lower()
+
+    def has(*patterns: str) -> bool:
+        return any(re.search(pattern, combined, re.IGNORECASE) for pattern in patterns)
+
+    def diagnosis(kind: str, title: str, detail: str, next_step: str, patterns: list[str], severity: str = "error") -> dict[str, Any]:
+        return {
+            "kind": kind,
+            "severity": severity,
+            "title": title,
+            "detail": detail,
+            "next_step": next_step,
+            "evidence": _failure_evidence(lines, patterns),
+        }
+
+    if has(r"parquet support requires pyarrow", r"no module named ['\"]pyarrow['\"]", r"modulenotfounderror: no module named ['\"]pyarrow['\"]"):
+        patterns = [r"pyarrow", r"parquet support"]
+        return diagnosis(
+            "missing_pyarrow",
+            "Parquet support is not installed yet",
+            "This run tried to read a parquet corpus file, but the local Python environment does not have pyarrow.",
+            "Install pyarrow locally, then retry. For a quick workaround, use .txt or .jsonl corpus files instead.",
+            patterns,
+        )
+    if has(r"tokenizer[\\/]+tokenizer\.pkl", r"tokenizer[\\/]+tokenizer\.json", r"return rustbpetokenizer\.from_directory", r"get_tokenizer\(\)"):
+        patterns = [r"tokenizer[\\/]+tokenizer\.(pkl|json)", r"RustBPETokenizer\.from_directory", r"get_tokenizer\(\)"]
+        return diagnosis(
+            "missing_tokenizer",
+            "Tokenizer files are missing",
+            "Base training or evaluation started before a tokenizer had been created in the nanochat cache.",
+            "Run Stage 1 Train Tokenizer first, confirm the tokenizer shows as ready, then launch this job again.",
+            patterns,
+        )
+    if has(r"no local documents found for split", r"populate the local corpus first"):
+        patterns = [r"no local documents found for split", r"populate the local corpus first"]
+        return diagnosis(
+            "empty_corpus_split",
+            "The local corpus is empty for this split",
+            "The training script did not find usable documents under the local corpus path it expected.",
+            "Add files under local_corpus, especially the train split, then retry. Text, JSONL, code files, and parquet are supported.",
+            patterns,
+        )
+    if has(r"identity_conversations\.jsonl", r"published identity file", r"identity file"):
+        patterns = [r"identity_conversations\.jsonl", r"published identity file", r"identity file"]
+        return diagnosis(
+            "missing_identity_file",
+            "The active identity file is missing",
+            "Chat SFT expected a published identity dataset, but it was not available when the run started.",
+            "Open Assistant Studio, publish the identity file, and then rerun Chat SFT.",
+            patterns,
+        )
+    if has(r"chatsft_checkpoints", r"no checkpoints found in .*chatsft_checkpoints", r"cannot find the path specified: .*chatsft_checkpoints"):
+        patterns = [r"chatsft_checkpoints", r"no checkpoints found"]
+        return diagnosis(
+            "missing_sft_checkpoint",
+            "A chat SFT checkpoint is missing",
+            "This stage needs an existing supervised fine-tuning checkpoint before it can continue.",
+            "Run Stage 3 Chat SFT first, then use Load Latest SFT or pick a valid SFT model tag before retrying Chat RL or Chat Eval.",
+            patterns,
+        )
+    if job_type == "chat_rl" and has(r"base_checkpoints", r"no checkpoints found in .*base"):
+        patterns = [r"base_checkpoints", r"no checkpoints found"]
+        return diagnosis(
+            "missing_base_checkpoint",
+            "The required base checkpoint was not found",
+            "Chat RL could not find the base model family it expected to build from.",
+            "Run Stage 2 Base Model Training first, then complete Chat SFT before coming back to Chat RL.",
+            patterns,
+        )
+    if has(r"out of memory", r"cuda out of memory", r"\boom\b") or bool((metrics or {}).get("oom_detected")):
+        patterns = [r"out of memory", r"cuda out of memory", r"\boom\b"]
+        return diagnosis(
+            "out_of_memory",
+            "The run ran out of memory",
+            "The current batch size or model shape is too large for the selected device.",
+            "Reduce Device Batch Size first. If needed, reduce sequence length, total batch size, or model depth and try again.",
+            patterns,
+        )
+    if has(r"modulenotfounderror: no module named ['\"]([^'\"]+)['\"]", r"importerror:"):
+        patterns = [r"modulenotfounderror", r"importerror"]
+        return diagnosis(
+            "missing_python_dependency",
+            "A Python dependency is missing",
+            "The job stopped while importing a required Python module.",
+            "Install the missing package in this environment, then rerun the job.",
+            patterns,
+        )
+    if has(r"filenotfounderror", r"no such file or directory", r"cannot find the path specified"):
+        patterns = [r"filenotfounderror", r"no such file or directory", r"cannot find the path specified"]
+        return diagnosis(
+            "missing_file_or_path",
+            "A required file or path was not found",
+            "The command references a local file, checkpoint, corpus directory, or dataset path that does not exist.",
+            "Check the path shown in the evidence, fix the form value or create the missing file, then retry.",
+            patterns,
+        )
+    return {
+        "kind": "unclassified",
+        "severity": "error",
+        "title": "The run stopped with an unclassified error",
+        "detail": "The raw logs still contain the exact traceback or command output.",
+        "next_step": "Read the final log lines, then use the assistant or process log to decide the next fix before rerunning.",
+        "evidence": [line[:260] for line in log_lines[-3:] if str(line).strip()],
+    }
+
+
 @dataclass
 class JobRecord:
     id: str
@@ -994,6 +1605,7 @@ class JobRecord:
             "is_resumed_run": requested_resume_step is not None,
             "can_pause": self.job_type in resumable_job_types and self.status in {"queued", "running"},
             "can_resume": self.job_type in resumable_job_types and latest_checkpoint_step is not None and self.status in {"paused", "stopped", "failed"},
+            "failure_diagnosis": diagnose_job_failure(self.job_type, self.status, self.command, list(self.log_lines), self.metrics),
         }
         if include_logs:
             payload["logs"] = list(self.log_lines)
@@ -1003,16 +1615,115 @@ class JobRecord:
 
 
 class BackgroundJobManager:
-    def __init__(self, workdir: Optional[str] = None, activity_log=None, benchmark_history: Optional[BenchmarkHistoryManager] = None):
+    def __init__(
+        self,
+        workdir: Optional[str] = None,
+        activity_log=None,
+        benchmark_history: Optional[BenchmarkHistoryManager] = None,
+        jobs_path: Optional[str | Path] = None,
+        max_persisted_jobs: int = JOB_HISTORY_LIMIT,
+    ):
         self.workdir = workdir or str(REPO_ROOT)
         self.activity_log = activity_log
         self.benchmark_history = benchmark_history
+        self.jobs_path = Path(jobs_path) if jobs_path is not None else JOBS_FILE
+        self.max_persisted_jobs = max(1, int(max_persisted_jobs))
         self._jobs: dict[str, JobRecord] = {}
         self._lock = threading.Lock()
+        self._load_persisted_jobs()
 
     def _log(self, kind: str, message: str, payload: Optional[dict[str, Any]] = None) -> None:
         if self.activity_log is not None:
             self.activity_log.log_event(kind, message, payload)
+
+    def _job_from_payload(self, payload: dict[str, Any]) -> Optional[JobRecord]:
+        try:
+            status = str(payload.get("status") or "stopped")
+            logs = list(payload.get("logs") or payload.get("log_tail") or [])
+            if status in {"queued", "running"}:
+                status = "stopped"
+                logs.append("[dashboard] Dashboard restarted before this job finished; the process could not be reattached.")
+            record = JobRecord(
+                id=str(payload["id"]),
+                label=str(payload.get("label") or payload.get("job_type") or "job"),
+                job_type=str(payload["job_type"]),
+                command=list(payload.get("command") or []),
+                created_at=float(payload.get("created_at") or 0.0),
+                cwd=str(payload.get("cwd") or self.workdir),
+                notes=str(payload.get("notes") or ""),
+                params=dict(payload.get("params") or {}),
+                status=status,
+                started_at=payload.get("started_at"),
+                finished_at=payload.get("finished_at"),
+                exit_code=payload.get("exit_code"),
+                pid=None,
+                metrics=dict(payload.get("metrics") or {}),
+            )
+            record.log_lines.extend(str(line) for line in logs[-JOB_LOG_LIMIT:])
+            return record
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _load_persisted_jobs(self) -> None:
+        if not self.jobs_path.exists():
+            return
+        try:
+            raw = json.loads(self.jobs_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        jobs = raw.get("jobs", raw if isinstance(raw, list) else [])
+        if not isinstance(jobs, list):
+            return
+        for item in jobs:
+            if not isinstance(item, dict):
+                continue
+            record = self._job_from_payload(item)
+            if record is not None:
+                self._jobs[record.id] = record
+        self._prune_job_history()
+
+    def _retained_jobs(self) -> list[JobRecord]:
+        jobs = sorted(self._jobs.values(), key=lambda item: item.created_at, reverse=True)
+        active = [job for job in jobs if job.status in {"queued", "running"}]
+        inactive = [job for job in jobs if job.status not in {"queued", "running"}]
+        retained: list[JobRecord] = []
+        seen: set[str] = set()
+        for job in [*active, *inactive]:
+            if job.id in seen:
+                continue
+            retained.append(job)
+            seen.add(job.id)
+            if len(retained) >= self.max_persisted_jobs and not active:
+                break
+        if len(retained) < self.max_persisted_jobs:
+            return retained
+        active_ids = {job.id for job in active}
+        return [job for job in retained if job.id in active_ids][: len(active)] + [
+            job for job in retained if job.id not in active_ids
+        ][: max(0, self.max_persisted_jobs - len(active))]
+
+    def _prune_job_history(self) -> None:
+        retained = self._retained_jobs()
+        retained_ids = {job.id for job in retained}
+        self._jobs = {job_id: job for job_id, job in self._jobs.items() if job_id in retained_ids}
+
+    def _persist_jobs(self) -> None:
+        try:
+            self.jobs_path.parent.mkdir(parents=True, exist_ok=True)
+            self._prune_job_history()
+            jobs = [job.snapshot(include_logs=True) for job in self._retained_jobs()]
+            jobs.sort(key=lambda item: item.get("created_at") or 0.0, reverse=True)
+            payload = {
+                "version": 1,
+                "saved_at": time.time(),
+                "max_jobs": self.max_persisted_jobs,
+                "jobs": jobs,
+            }
+            temp_path = self.jobs_path.with_suffix(f"{self.jobs_path.suffix}.tmp")
+            temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            temp_path.replace(self.jobs_path)
+        except OSError:
+            pass
 
     def list_jobs(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -1041,6 +1752,7 @@ class BackgroundJobManager:
         )
         with self._lock:
             self._jobs[job_id] = record
+            self._persist_jobs()
         self._log(
             "job_queued",
             f"Queued job {label}",
@@ -1064,6 +1776,7 @@ class BackgroundJobManager:
             process.terminate()
         except OSError:
             pass
+        self._persist_jobs()
         return job.snapshot(include_logs=True)
 
     def pause_job(self, job_id: str) -> dict[str, Any]:
@@ -1084,13 +1797,10 @@ class BackgroundJobManager:
             process.terminate()
         except OSError:
             pass
+        self._persist_jobs()
         return job.snapshot(include_logs=True)
 
-    def resume_job(self, job_id: str) -> dict[str, Any]:
-        with self._lock:
-            if job_id not in self._jobs:
-                raise KeyError(job_id)
-            job = self._jobs[job_id]
+    def _resume_plan(self, job: JobRecord) -> dict[str, Any]:
         if job.job_type not in {"base_train", "chat_sft", "chat_rl"}:
             raise ValueError("Resume is currently supported only for base training, chat SFT, and chat RL runs.")
         checkpoint_step = latest_checkpoint_step_for_job(job.job_type, job.params)
@@ -1105,12 +1815,38 @@ class BackgroundJobManager:
         if job.job_type == "chat_rl":
             resume_params["model_step"] = ""
         command = build_job_command(job.job_type, resume_params)
-        label = f"{job.label} resume"
-        resumed = self.start_job(job.job_type, label, command, notes=f"resumed from {job.id} at step {checkpoint_step}", params=resume_params)
+        return {
+            "source_job_id": job.id,
+            "source_label": job.label,
+            "job_type": job.job_type,
+            "checkpoint_step": checkpoint_step,
+            "checkpoint": checkpoint_info_for_job(job.job_type, job.params),
+            "params": resume_params,
+            "command": command,
+            "display_command": subprocess.list2cmdline(command),
+            "command_diff": command_diff_summary(job.command, command),
+            "label": f"{job.label} resume",
+            "notes": f"resumed from {job.id} at step {checkpoint_step}",
+        }
+
+    def preview_resume_job(self, job_id: str) -> dict[str, Any]:
+        with self._lock:
+            if job_id not in self._jobs:
+                raise KeyError(job_id)
+            job = self._jobs[job_id]
+        return {"source_job": job.snapshot(include_logs=False), "resume": self._resume_plan(job)}
+
+    def resume_job(self, job_id: str) -> dict[str, Any]:
+        with self._lock:
+            if job_id not in self._jobs:
+                raise KeyError(job_id)
+            job = self._jobs[job_id]
+        plan = self._resume_plan(job)
+        resumed = self.start_job(job.job_type, plan["label"], plan["command"], notes=plan["notes"], params=plan["params"])
         self._log(
             "job_resumed",
             f"Resumed job {job.label}",
-            {"job_id": resumed["id"], "source_job_id": job.id, "job_type": job.job_type, "resume_from_step": checkpoint_step},
+            {"job_id": resumed["id"], "source_job_id": job.id, "job_type": job.job_type, "resume_from_step": plan["checkpoint_step"]},
         )
         return resumed
 
@@ -1191,5 +1927,6 @@ class BackgroundJobManager:
                 record.status = "stopped"
             record.finished_at = time.time()
             record.process = None
+            self._persist_jobs()
             if self.benchmark_history is not None and record.status in {"completed", "failed", "stopped", "paused"}:
                 self.benchmark_history.append_job_result(record.snapshot(include_logs=True))

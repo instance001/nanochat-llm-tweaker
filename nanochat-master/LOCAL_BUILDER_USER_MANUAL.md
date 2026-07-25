@@ -368,8 +368,59 @@ You do not need deep ML knowledge to begin, but you do need a few practical thin
 
 - Vulkan-capable GPU for the local runtime assistant
 - CUDA or MPS for faster training if your system supports it
-- `pyarrow` only if you want to use `.parquet` files in the corpus
+- the `parquet` extra, installed with `uv sync --extra parquet`, only if you want to use `.parquet` corpus files or SFT parquet export
 - Microsoft Visual Studio Build Tools with the Desktop C++ workload if you plan to do local Windows CPU training
+
+### Recommended Install Profiles
+
+Use these from `nanochat-master/`.
+
+For most Windows machines, including AMD Windows boxes:
+
+```powershell
+uv sync --extra cpu --extra parquet
+```
+
+This gives you CPU PyTorch training plus parquet dataset support.
+
+On AMD Windows, this check is expected:
+
+```powershell
+uv run python -c "import torch; print(torch.__version__); print('CUDA:', torch.cuda.is_available())"
+```
+
+Expected result:
+
+```text
+2.9.1+cpu
+CUDA: False
+```
+
+That does not mean the setup is broken. CUDA is NVIDIA-only. AMD Windows should use the CPU training path here. The local GGUF helper runtime may still use Vulkan acceleration through the bundled `llama.cpp` runtime when available.
+
+For NVIDIA CUDA machines:
+
+```powershell
+uv sync --extra gpu --extra parquet
+```
+
+For a minimal no-parquet install:
+
+```powershell
+uv sync --extra cpu
+```
+
+To confirm parquet support:
+
+```powershell
+uv run python -c "import pyarrow; print(pyarrow.__version__)"
+```
+
+If `uv` is not installed yet, install it with:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ### Important Expectation
 
@@ -741,7 +792,7 @@ Use `.parquet` when:
 
 Requirements:
 
-- install local `pyarrow`
+- install the local `parquet` extra with `uv sync --extra parquet`
 - make sure the `.parquet` files really live under the configured corpus directory
 
 If `pyarrow` is missing, `.parquet` files are not usable even if they are present on disk.
@@ -1729,6 +1780,18 @@ Check:
 ## Parquet Files Do Not Work
 
 You need local `pyarrow` support for `.parquet`.
+
+Preferred install command from `nanochat-master/`:
+
+```powershell
+uv sync --extra parquet
+```
+
+Manual pip fallback:
+
+```powershell
+python -m pip install pyarrow
+```
 
 For local Windows CPU training, you may also need Microsoft Visual Studio Build Tools with the Desktop C++ workload so compile-based training paths can run correctly.
 

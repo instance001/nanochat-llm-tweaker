@@ -13,6 +13,8 @@ eval_bundle/
 CLAUDE.md
 wandb/
 builder_logs/*.jsonl
+builder_logs/jobs.json
+builder_logs/jobs.json.tmp
 local_corpus/
 models/
 runtime/models/

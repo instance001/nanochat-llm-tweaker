@@ -6,6 +6,8 @@ nanochat-master/Assistant_models/
 nanochat-master/assistant_models/
 nanochat-master/local_corpus/
 nanochat-master/builder_logs/*.jsonl
+nanochat-master/builder_logs/jobs.json
+nanochat-master/builder_logs/jobs.json.tmp
 nanochat-master/Assistant_sandbox/*.jsonl
 nanochat-master/assistant_sandbox/*.jsonl
 nanochat-master/Assistant_sandbox/notes/

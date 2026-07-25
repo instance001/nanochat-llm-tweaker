@@ -17,6 +17,7 @@ import logging
 import os
 import random
 import re
+import subprocess
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -37,8 +38,8 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from nanochat.benchmark_tools import BenchmarkHistoryManager
-from nanochat.common import autodetect_device_type, compute_init
-from nanochat.dataset import TEXT_SUFFIXES
+from nanochat.common import autodetect_device_type, compute_init, get_base_dir
+from nanochat.dataset import TEXT_SUFFIXES, inspect_local_corpus
 from nanochat.dashboard_tools import (
     BackgroundJobManager,
     GUIDED_PRESETS,
@@ -47,18 +48,30 @@ from nanochat.dashboard_tools import (
     delete_design,
     list_designs,
     publish_design,
+    run_profiles,
     save_design,
+    validate_job_params,
 )
 from nanochat.activity_log import ActivityLogManager
 from nanochat.ecg_monitor import EcgMonitor
 from nanochat.local_runtime import LocalRuntimeManager
+from nanochat.preflight import run_stage_preflight
+from nanochat.report import EXPECTED_FILES, Report
 from nanochat.sandbox_tools import CorpusManager, SandboxManager
 from nanochat.sft_dataset_tools import (
+    conversations_from_jsonl,
     conversations_to_jsonl,
     merge_jsonl,
+    normalize_conversation,
     normalize_conversations,
+    preview_sft_jsonl_export,
+    preview_sft_parquet_export,
+    preview_sft_split_export,
     sft_schema_payload,
+    split_conversations,
+    write_sft_parquet_file,
 )
+from nanochat.validation_tools import validate_corpus_path, validate_sft_jsonl_content
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 NANOCHAT_DIR = REPO_ROOT / "nanochat"
@@ -214,6 +227,11 @@ class JobRequest(BaseModel):
     notes: str = ""
 
 
+class JobPreflightRequest(BaseModel):
+    job_type: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChatLoadRequest(BaseModel):
     source: Optional[str] = None
     model_tag: Optional[str] = None
@@ -246,6 +264,9 @@ class RuntimeChatRequest(BaseModel):
 
 class RuntimeAssistRequest(RuntimeChatRequest):
     max_actions: int = 3
+    action_mode: str = "auto"
+    approved_action: Optional[dict[str, Any]] = None
+    approved_action_text: str = ""
 
 
 class SandboxWriteRequest(BaseModel):
@@ -255,6 +276,30 @@ class SandboxWriteRequest(BaseModel):
     mode: str = "overwrite"
 
 
+class CorpusParquetConvertRequest(BaseModel):
+    path: str = "train/converted.parquet"
+    content: str = ""
+    conversion_mode: str = "paragraphs"
+    mode: str = "overwrite"
+    source: str = "dashboard"
+
+
+class CorpusSplitRequest(BaseModel):
+    train_path: str = "train/split.txt"
+    val_path: str = "val/split.txt"
+    content: str = ""
+    split_mode: str = "paragraphs"
+    val_ratio: float = 0.1
+    seed: int = 1337
+
+
+class CorpusInspectRequest(BaseModel):
+    split: str = "train"
+    show_docs: int = 3
+    max_chars: int = 240
+    long_doc_chars: int = 8000
+
+
 class SandboxDeleteRequest(BaseModel):
     path: str
 
@@ -262,6 +307,34 @@ class SandboxDeleteRequest(BaseModel):
 class WorkspaceCopyRequest(BaseModel):
     source_path: str
     target_path: str
+
+
+class PathResolveRequest(BaseModel):
+    path: str = ""
+    kind: str = "auto"
+    multiple: bool = False
+
+
+class ValidatePathRequest(BaseModel):
+    path: str = ""
+
+
+class ChatTranscriptExportRequest(BaseModel):
+    path: str
+    messages: List[ChatMessage]
+    format: str = "json"
+    mode: str = "overwrite"
+    preview: bool = False
+
+
+class SftDatasetExportRequest(BaseModel):
+    source_path: str = "chat_train.jsonl"
+    target_path: str = "exports/chat_train.parquet"
+    val_target_path: str = "exports/chat_val.jsonl"
+    format: str = "parquet"
+    source: str = "assistant_sandbox"
+    val_ratio: float = 0.1
+    seed: int = 1337
 
 
 class AutoTuneRequest(BaseModel):
@@ -361,6 +434,263 @@ def chat_status_snapshot(app: FastAPI) -> dict[str, Any]:
     }
 
 
+def report_status_payload() -> dict[str, Any]:
+    report_dir = Path(get_base_dir()) / "report"
+    report_file = report_dir / "report.md"
+    header_file = report_dir / "header.md"
+    root_copy = REPO_ROOT / "report.md"
+    section_files = []
+    for file_name in EXPECTED_FILES:
+        path = report_dir / file_name
+        section_files.append(
+            {
+                "name": file_name,
+                "path": str(path),
+                "exists": path.exists(),
+                "size": path.stat().st_size if path.exists() else 0,
+                "updated_at": path.stat().st_mtime if path.exists() else None,
+            }
+        )
+    preview = ""
+    if report_file.exists():
+        preview = report_file.read_text(encoding="utf-8", errors="replace")[:4000]
+    return {
+        "report_dir": str(report_dir),
+        "report_file": str(report_file),
+        "report_exists": report_file.exists(),
+        "report_size": report_file.stat().st_size if report_file.exists() else 0,
+        "header_file": str(header_file),
+        "header_exists": header_file.exists(),
+        "root_copy": str(root_copy),
+        "root_copy_exists": root_copy.exists(),
+        "section_files": section_files,
+        "ready_sections": sum(1 for item in section_files if item["exists"]),
+        "expected_sections": len(section_files),
+        "preview": preview,
+    }
+
+
+def readiness_payload(app: FastAPI, builder: Optional[dict[str, Any]] = None, runtime: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    builder = builder or builder_state()
+    runtime = runtime or app.state.local_runtime.status()
+    checks: list[dict[str, Any]] = []
+
+    def add_check(code: str, label: str, status: str, message: str, detail: str = "", next_step: str = "") -> None:
+        checks.append(
+            {
+                "code": code,
+                "label": label,
+                "status": status,
+                "message": message,
+                "detail": detail,
+                "next_step": next_step,
+            }
+        )
+
+    corpus_files = app.state.corpus.list_files()
+    train_files = sum(1 for file in corpus_files if str(file.get("path", "")).startswith("train/"))
+    val_files = sum(1 for file in corpus_files if str(file.get("path", "")).startswith("val/"))
+    add_check(
+        "corpus_train",
+        "Training Corpus",
+        "ready" if train_files else "blocker",
+        f"{train_files} train file(s) found.",
+        f"{val_files} validation file(s) found.",
+        "Add text, JSONL object rows, or parquet files under local_corpus/train.",
+    )
+
+    identity_exists = bool(builder.get("identity_exists"))
+    add_check(
+        "identity",
+        "Identity Data",
+        "ready" if identity_exists else "warning",
+        "Identity conversation file is published." if identity_exists else "No published identity conversation file yet.",
+        str(builder.get("identity_file", "")),
+        "Save and publish an assistant design before Chat SFT.",
+    )
+
+    tokenizer_ready = bool(builder.get("tokenizer_ready"))
+    add_check(
+        "tokenizer",
+        "Tokenizer",
+        "ready" if tokenizer_ready else "blocker",
+        "Tokenizer cache exists." if tokenizer_ready else "Tokenizer is not trained yet.",
+        str(builder.get("tokenizer_path", "")),
+        "Run tokenizer training after the corpus has at least one train file.",
+    )
+
+    checkpoint_sets = builder.get("checkpoint_sets", {})
+    base_tags = checkpoint_sets.get("base", {}).get("tags", []) or []
+    sft_tags = checkpoint_sets.get("sft", {}).get("tags", []) or []
+    rl_tags = checkpoint_sets.get("rl", {}).get("tags", []) or []
+    add_check(
+        "base_checkpoint",
+        "Base Checkpoint",
+        "ready" if base_tags else "blocker",
+        f"{len(base_tags)} base checkpoint tag(s) found.",
+        "",
+        "Run base training after the tokenizer is ready.",
+    )
+    add_check(
+        "sft_checkpoint",
+        "SFT Checkpoint",
+        "ready" if sft_tags else "warning",
+        f"{len(sft_tags)} SFT checkpoint tag(s) found.",
+        "",
+        "Draft/validate SFT JSONL, then run Chat SFT.",
+    )
+    add_check(
+        "rl_checkpoint",
+        "RL Checkpoint",
+        "ready" if rl_tags else "optional",
+        f"{len(rl_tags)} RL checkpoint tag(s) found.",
+        "",
+        "RL is optional; evaluate SFT first before deciding whether to run RL.",
+    )
+
+    sft_train_path = app.state.sandbox.root / "chat_train.jsonl"
+    if sft_train_path.exists():
+        try:
+            sft_report = validate_sft_jsonl_content(sft_train_path.read_text(encoding="utf-8", errors="replace"), path=str(sft_train_path))
+            sft_ready = bool(sft_report.get("ok")) and int(sft_report.get("record_count", 0) or 0) > 0
+            add_check(
+                "sft_train_file",
+                "SFT Train File",
+                "ready" if sft_ready else "warning",
+                f"{sft_report.get('record_count', 0)} conversation row(s) found in chat_train.jsonl.",
+                "; ".join((sft_report.get("errors") or sft_report.get("warnings") or [])[:2]),
+                "Use Conversation Lab export or assistant SFT drafting to create valid JSONL.",
+            )
+        except ValueError as exc:
+            add_check(
+                "sft_train_file",
+                "SFT Train File",
+                "warning",
+                "chat_train.jsonl exists but could not be validated.",
+                str(exc),
+                "Open the sandbox file and run Validate SFT Dataset.",
+            )
+    else:
+        add_check(
+            "sft_train_file",
+            "SFT Train File",
+            "warning",
+            "No chat_train.jsonl file found in assistant_sandbox.",
+            str(sft_train_path),
+            "Export a Conversation Lab transcript or draft SFT pairs into chat_train.jsonl.",
+        )
+
+    bundle = runtime.get("bundle", {}) if isinstance(runtime, dict) else {}
+    runtime_models = bundle.get("models", []) or []
+    recommended_model = bundle.get("recommended_model")
+    add_check(
+        "helper_model",
+        "Helper Model",
+        "ready" if recommended_model or runtime_models else "warning",
+        "A local GGUF helper model is available." if recommended_model or runtime_models else "No local GGUF helper model detected.",
+        str((recommended_model or {}).get("path", "")) if isinstance(recommended_model, dict) else "",
+        "Place a GGUF under assistant_models, models, or runtime/models.",
+    )
+    add_check(
+        "local_runtime",
+        "Local Runtime",
+        "ready" if runtime.get("ready") else "warning",
+        "Local runtime is ready." if runtime.get("ready") else "Local runtime is not ready.",
+        runtime.get("last_error", "") or runtime.get("mode", "") or "",
+        "Start the local runtime when you want Assistant Actions or GGUF chat.",
+    )
+
+    status_rank = {"blocker": 3, "warning": 2, "optional": 1, "ready": 0}
+    blocker_count = sum(1 for check in checks if check["status"] == "blocker")
+    warning_count = sum(1 for check in checks if check["status"] == "warning")
+    ready_count = sum(1 for check in checks if check["status"] == "ready")
+    next_check = next((check for check in checks if check["status"] == "blocker"), None)
+    if next_check is None:
+        next_check = next((check for check in checks if check["status"] == "warning"), None)
+    if next_check is None:
+        next_check = next((check for check in checks if check["status"] == "optional"), None)
+    ordered_checks = sorted(checks, key=lambda check: status_rank.get(check["status"], 0), reverse=True)
+    return {
+        "ok": blocker_count == 0,
+        "status": "blocked" if blocker_count else "attention" if warning_count else "ready",
+        "ready_count": ready_count,
+        "check_count": len(checks),
+        "blocker_count": blocker_count,
+        "warning_count": warning_count,
+        "next_step": next_check["next_step"] if next_check else "Run an eval or compare checkpoints in Conversation Lab.",
+        "checks": ordered_checks,
+    }
+
+
+def split_path_entries(value: str) -> list[str]:
+    return [piece.strip() for piece in re.split(r"[;\n|]+", str(value or "")) if piece.strip()]
+
+
+def resolve_path_reference(app: FastAPI, path_value: str, kind: str = "auto") -> dict[str, Any]:
+    raw = str(path_value or "").strip()
+    normalized_kind = (kind or "auto").strip().lower()
+    result = {
+        "input": raw,
+        "kind": normalized_kind,
+        "scope": "empty",
+        "resolved_path": "",
+        "exists": False,
+        "is_absolute": False,
+        "note": "No path provided.",
+    }
+    if not raw:
+        return result
+
+    candidate = Path(raw)
+    is_absolute = candidate.is_absolute()
+    result["is_absolute"] = is_absolute
+    lower = raw.replace("\\", "/").lower()
+
+    if normalized_kind in {"sandbox", "sandbox_file"}:
+        if is_absolute:
+            result.update({"scope": "absolute", "resolved_path": str(candidate.resolve()), "note": "Absolute path supplied where a sandbox-relative path is usually expected."})
+        else:
+            resolved = (app.state.sandbox.root / raw).resolve()
+            result.update({"scope": "assistant_sandbox", "resolved_path": str(resolved), "note": "Resolved relative to assistant_sandbox."})
+    elif normalized_kind in {"corpus", "corpus_file"}:
+        if is_absolute:
+            result.update({"scope": "absolute", "resolved_path": str(candidate.resolve()), "note": "Absolute path supplied where a corpus-relative path is usually expected."})
+        else:
+            resolved = (app.state.corpus.root / raw).resolve()
+            result.update({"scope": "local_corpus", "resolved_path": str(resolved), "note": "Resolved relative to local_corpus."})
+    elif normalized_kind in {"corpus_dir", "directory"}:
+        resolved = candidate.resolve() if is_absolute else (REPO_ROOT / raw).resolve()
+        result.update({"scope": "absolute" if is_absolute else "repo_relative", "resolved_path": str(resolved), "note": "Directory path used as provided." if is_absolute else "Relative directory path resolved from the repo root."})
+    elif normalized_kind in {"model", "runtime_model"}:
+        resolved = candidate.resolve() if is_absolute else (REPO_ROOT / raw).resolve()
+        result.update({"scope": "absolute" if is_absolute else "repo_relative", "resolved_path": str(resolved), "note": "Runtime model path used as provided." if is_absolute else "Relative model path resolved from the repo root."})
+    elif normalized_kind in {"sft", "sft_file"}:
+        if is_absolute:
+            result.update({"scope": "absolute", "resolved_path": str(candidate.resolve()), "note": "Absolute SFT dataset path."})
+        elif lower.startswith("train/") or lower.startswith("val/"):
+            resolved = (app.state.corpus.root / raw).resolve()
+            result.update({"scope": "local_corpus", "resolved_path": str(resolved), "note": "Looks like a corpus split path; Chat SFT usually expects assistant_sandbox JSONL instead."})
+        else:
+            resolved = (app.state.sandbox.root / raw).resolve()
+            result.update({"scope": "assistant_sandbox", "resolved_path": str(resolved), "note": "Resolved relative to assistant_sandbox for Chat SFT."})
+    elif normalized_kind == "identity":
+        resolved = candidate.resolve() if is_absolute else (Path(get_base_dir()) / raw).resolve()
+        result.update({"scope": "absolute" if is_absolute else "cache_relative", "resolved_path": str(resolved), "note": "Identity path used as provided." if is_absolute else "Relative identity path resolved from the cache directory."})
+    else:
+        if is_absolute:
+            result.update({"scope": "absolute", "resolved_path": str(candidate.resolve()), "note": "Absolute path."})
+        elif lower.startswith("train/") or lower.startswith("val/"):
+            resolved = (app.state.corpus.root / raw).resolve()
+            result.update({"scope": "local_corpus", "resolved_path": str(resolved), "note": "Resolved relative to local_corpus because the path starts with train/ or val/."})
+        else:
+            resolved = (app.state.sandbox.root / raw).resolve()
+            result.update({"scope": "assistant_sandbox", "resolved_path": str(resolved), "note": "Resolved relative to assistant_sandbox by default."})
+
+    resolved_path = Path(result["resolved_path"])
+    result["exists"] = resolved_path.exists()
+    return result
+
+
 def render_builder_brief(app: FastAPI) -> str:
     builder = builder_state()
     jobs = app.state.job_manager.list_jobs()[:6]
@@ -400,6 +730,12 @@ def parse_assistant_action(text: str) -> dict[str, Any] | None:
         payload = json.loads(match.group(1))
     except json.JSONDecodeError:
         return None
+    if not isinstance(payload, dict) or "tool" not in payload:
+        return None
+    payload.setdefault("args", {})
+    if not isinstance(payload["args"], dict):
+        return None
+    return payload
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
@@ -498,12 +834,6 @@ def build_design_draft_prompt(goal: str) -> str:
         "Required JSON schema:\n"
         f"{json.dumps(schema, ensure_ascii=True, indent=2)}"
     )
-    if not isinstance(payload, dict) or "tool" not in payload:
-        return None
-    payload.setdefault("args", {})
-    if not isinstance(payload["args"], dict):
-        return None
-    return payload
 
 
 def render_tool_help() -> str:
@@ -861,6 +1191,135 @@ def _compact_tool_result(result: Any, max_chars: int = 5000) -> str:
     return text
 
 
+ASSISTANT_APPROVAL_TOOLS = {
+    "autotune_settings",
+    "write_corpus_file",
+    "draft_corpus_file",
+    "delete_corpus_file",
+    "copy_sandbox_to_corpus",
+    "draft_sft_data",
+    "write_sandbox_file",
+    "delete_sandbox_file",
+    "launch_job",
+    "stop_job",
+}
+
+
+def _assistant_action_tag(tool_name: str, tool_args: dict[str, Any]) -> str:
+    payload = {"tool": tool_name, "args": tool_args}
+    return f"<assistant_action>{json.dumps(payload, ensure_ascii=True)}</assistant_action>"
+
+
+def _assistant_tool_result_message(tool_name: str, status: str, result: dict[str, Any]) -> dict[str, str]:
+    return {
+        "role": "user",
+        "content": (
+            f"TOOL RESULT for {tool_name} ({status}). "
+            "Now continue. If more local actions are needed, emit another <assistant_action> JSON object. "
+            "Otherwise give the final answer to the user.\n\n"
+            f"{_compact_tool_result(result)}"
+        ),
+    }
+
+
+def preview_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    preview: dict[str, Any] = {
+        "tool": tool_name,
+        "args": args,
+        "requires_approval": tool_name in ASSISTANT_APPROVAL_TOOLS,
+        "risk": "low",
+        "summary": f"Run assistant action {tool_name}.",
+    }
+    if tool_name in {"write_sandbox_file", "draft_sft_data"}:
+        path = str(args.get("path") or "chat_train.jsonl")
+        content = str(args.get("content", ""))
+        preview.update(
+            {
+                "risk": "write",
+                "summary": f"Write or append data under assistant_sandbox: {path}",
+                "path": path,
+                "mode": str(args.get("mode") or "overwrite"),
+                "content_preview": content[:1200],
+            }
+        )
+    elif tool_name in {"write_corpus_file", "draft_corpus_file"}:
+        path = str(args.get("path") or "train/reference.txt")
+        content = str(args.get("content", ""))
+        records = args.get("records", [])
+        preview.update(
+            {
+                "risk": "write",
+                "summary": f"Write or append data under local_corpus: {path}",
+                "path": path,
+                "mode": str(args.get("mode") or "overwrite"),
+                "content_preview": content[:1200] if content else json.dumps(records, ensure_ascii=True, indent=2)[:1200],
+            }
+        )
+    elif tool_name in {"delete_sandbox_file", "delete_corpus_file"}:
+        preview.update(
+            {
+                "risk": "delete",
+                "summary": f"Delete file: {args.get('path', '')}",
+                "path": str(args.get("path", "")),
+            }
+        )
+    elif tool_name == "copy_sandbox_to_corpus":
+        preview.update(
+            {
+                "risk": "write",
+                "summary": f"Copy sandbox file {args.get('source_path', '')} into corpus file {args.get('target_path', '')}.",
+                "source_path": str(args.get("source_path", "")),
+                "target_path": str(args.get("target_path", "")),
+            }
+        )
+    elif tool_name == "launch_job":
+        allowed_job_types = {"tokenizer_train", "tokenizer_eval", "base_train", "base_eval", "benchmark_eval", "chat_sft", "chat_rl", "chat_eval"}
+        job_type = str(args.get("job_type", ""))
+        if job_type in allowed_job_types:
+            params = _coerce_job_params_for_tool(app, job_type, args.get("params", {}))
+            command = build_job_command(job_type, params)
+            preview.update(
+                {
+                    "risk": "job",
+                    "summary": f"Launch dashboard job: {job_type}",
+                    "job_type": job_type,
+                    "resolved_params": params,
+                    "command": command,
+                    "display_command": subprocess.list2cmdline(command),
+                    "preflight": dashboard_job_preflight(app, job_type, params),
+                }
+            )
+        else:
+            preview.update({"risk": "job", "summary": f"Launch unsupported dashboard job: {job_type}", "job_type": job_type})
+    elif tool_name == "stop_job":
+        preview.update(
+            {
+                "risk": "stop",
+                "summary": f"Stop dashboard job: {args.get('job_id', '')}",
+                "job_id": str(args.get("job_id", "")),
+            }
+        )
+    elif tool_name == "autotune_settings":
+        preview.update(
+            {
+                "risk": "settings",
+                "summary": "Apply benchmark-based settings recommendations to the dashboard forms.",
+            }
+        )
+    return preview
+
+
+def execute_assistant_action(app: FastAPI, tool_name: str, tool_args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    try:
+        result = execute_assistant_tool(app, tool_name, tool_args)
+        status = "ok"
+    except Exception as exc:
+        result = {"error": str(exc)}
+        status = "error"
+    app.state.activity_log.log_event("assistant_tool_result", f"Assistant tool {tool_name} returned {status}", {"result": result})
+    return status, result
+
+
 def run_assistant_tool_loop(
     app: FastAPI,
     messages: list[dict[str, str]],
@@ -868,13 +1327,32 @@ def run_assistant_tool_loop(
     max_tokens: int,
     system_prompt: str,
     max_actions: int,
+    action_mode: str = "auto",
+    approved_action: Optional[dict[str, Any]] = None,
+    approved_action_text: str = "",
 ) -> dict[str, Any]:
     runtime = app.state.local_runtime
     transcript = list(messages)
     actions: list[dict[str, Any]] = []
     max_actions = max(0, min(max_actions, MAX_ASSISTANT_ACTIONS))
+    normalized_action_mode = action_mode.strip().lower() if action_mode else "auto"
+    if normalized_action_mode not in {"auto", "review"}:
+        raise ValueError("action_mode must be 'auto' or 'review'.")
 
-    for _ in range(max_actions + 1):
+    if approved_action:
+        if not isinstance(approved_action, dict) or "tool" not in approved_action:
+            raise ValueError("approved_action must include a tool.")
+        tool_name = str(approved_action["tool"])
+        tool_args = approved_action.get("args", {})
+        if not isinstance(tool_args, dict):
+            raise ValueError("approved_action args must be an object.")
+        app.state.activity_log.log_event("assistant_tool_approved", f"User approved assistant action {tool_name}", {"args": tool_args})
+        status, result = execute_assistant_action(app, tool_name, tool_args)
+        actions.append({"tool": tool_name, "args": tool_args, "status": status, "result": result})
+        transcript.append({"role": "assistant", "content": approved_action_text or _assistant_action_tag(tool_name, tool_args)})
+        transcript.append(_assistant_tool_result_message(tool_name, status, result))
+
+    for _ in range(max(0, max_actions - len(actions)) + 1):
         response = runtime.chat(
             transcript,
             temperature=temperature,
@@ -893,26 +1371,20 @@ def run_assistant_tool_loop(
         tool_name = str(action_call["tool"])
         tool_args = action_call.get("args", {})
         app.state.activity_log.log_event("assistant_tool_request", f"Assistant requested {tool_name}", {"args": tool_args})
-        try:
-            result = execute_assistant_tool(app, tool_name, tool_args)
-            status = "ok"
-        except Exception as exc:
-            result = {"error": str(exc)}
-            status = "error"
-        app.state.activity_log.log_event("assistant_tool_result", f"Assistant tool {tool_name} returned {status}", {"result": result})
+        plan = preview_assistant_tool(app, tool_name, tool_args)
+        if normalized_action_mode == "review" and plan["requires_approval"]:
+            app.state.activity_log.log_event("assistant_tool_pending", f"Assistant action {tool_name} is waiting for approval", {"preview": plan})
+            return {
+                "text": "I prepared a local action and paused for your approval.",
+                "actions": actions,
+                "pending_action": {"tool": tool_name, "args": tool_args, "preview": plan, "assistant_text": text},
+                "approval_required": True,
+                "raw": response.get("raw"),
+            }
+        status, result = execute_assistant_action(app, tool_name, tool_args)
         actions.append({"tool": tool_name, "args": tool_args, "status": status, "result": result})
         transcript.append({"role": "assistant", "content": text})
-        transcript.append(
-            {
-                "role": "user",
-                "content": (
-                    f"TOOL RESULT for {tool_name} ({status}). "
-                    "Now continue. If more local actions are needed, emit another <assistant_action> JSON object. "
-                    "Otherwise give the final answer to the user.\n\n"
-                    f"{_compact_tool_result(result)}"
-                ),
-            }
-        )
+        transcript.append(_assistant_tool_result_message(tool_name, status, result))
 
     return {
         "text": "I stopped after reaching the local action limit. Review the recent activity log and continue from there if needed.",
@@ -1111,17 +1583,33 @@ async def fmi_splash_wordmark():
 
 @app.get("/api/dashboard/bootstrap")
 async def dashboard_bootstrap():
+    builder = builder_state()
+    runtime = app.state.local_runtime.status()
     return {
-        "builder": builder_state(),
+        "builder": builder,
         "jobs": app.state.job_manager.list_jobs(),
         "chat": chat_status_snapshot(app),
-        "runtime": app.state.local_runtime.status(),
+        "runtime": runtime,
+        "readiness": readiness_payload(app, builder=builder, runtime=runtime),
         "ecg": app.state.ecg_monitor.snapshot(),
         "sandbox": app.state.sandbox.status(),
         "corpus": app.state.corpus.status(),
         "activity": app.state.activity_log.snapshot(limit=80),
         "benchmarks": app.state.benchmark_history.snapshot(limit=20),
+        "report": report_status_payload(),
     }
+
+
+@app.get("/api/dashboard/readiness")
+async def dashboard_readiness():
+    builder = builder_state()
+    runtime = app.state.local_runtime.status()
+    return readiness_payload(app, builder=builder, runtime=runtime)
+
+
+@app.get("/api/dashboard/run-profiles")
+async def dashboard_run_profiles():
+    return {"profiles": run_profiles()}
 
 
 @app.get("/api/dashboard/ecg")
@@ -1132,6 +1620,92 @@ async def dashboard_ecg():
 @app.get("/api/dashboard/jobs")
 async def dashboard_jobs():
     return {"jobs": app.state.job_manager.list_jobs()}
+
+
+def dashboard_job_preflight(app: FastAPI, job_type: str, params: dict[str, Any]) -> dict[str, Any]:
+    builder = builder_state()
+    return run_stage_preflight(
+        job_type,
+        params,
+        base_dir=builder["base_dir"],
+        corpus_dir=app.state.corpus.root,
+        sandbox_dir=app.state.sandbox.root,
+        tokenizer_ready=bool(builder["tokenizer_ready"]),
+        identity_exists=bool(builder["identity_exists"]),
+        checkpoint_sets=builder["checkpoint_sets"],
+    )
+
+
+def job_path_hints(app: FastAPI, job_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    hints: list[dict[str, Any]] = []
+    for key, value in params.items():
+        if value in {None, ""}:
+            continue
+        if key in {"train_files", "val_files"}:
+            for entry in split_path_entries(str(value)):
+                hint = resolve_path_reference(app, entry, kind="sft")
+                hint["field"] = key
+                hints.append(hint)
+        elif key == "corpus_dir":
+            hint = resolve_path_reference(app, str(value), kind="corpus_dir")
+            hint["field"] = key
+            hints.append(hint)
+        elif key == "identity_file":
+            hint = resolve_path_reference(app, str(value), kind="identity")
+            hint["field"] = key
+            hints.append(hint)
+        elif key == "model_path":
+            hint = resolve_path_reference(app, str(value), kind="model")
+            hint["field"] = key
+            hints.append(hint)
+    return hints
+
+
+@app.post("/api/dashboard/jobs/preflight")
+async def dashboard_jobs_preflight(request: JobPreflightRequest):
+    return dashboard_job_preflight(app, request.job_type, dict(request.params))
+
+
+@app.post("/api/dashboard/paths/resolve")
+async def dashboard_paths_resolve(request: PathResolveRequest):
+    entries = split_path_entries(request.path) if request.multiple else [request.path]
+    return {
+        "kind": request.kind,
+        "multiple": request.multiple,
+        "paths": [resolve_path_reference(app, entry, kind=request.kind) for entry in entries],
+    }
+
+
+@app.post("/api/dashboard/jobs/validate")
+async def dashboard_jobs_validate(request: JobPreflightRequest):
+    return validate_job_params(request.job_type, dict(request.params), hardware_profile=builder_state().get("hardware_profile"))
+
+
+@app.post("/api/dashboard/jobs/preview")
+async def dashboard_jobs_preview(request: JobPreflightRequest):
+    params = dict(request.params)
+    try:
+        command = build_job_command(request.job_type, params)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    preflight = dashboard_job_preflight(app, request.job_type, params)
+    form_validation = validate_job_params(request.job_type, params, hardware_profile=builder_state().get("hardware_profile"))
+    return {
+        "job_type": request.job_type,
+        "params": params,
+        "command": command,
+        "display_command": subprocess.list2cmdline(command),
+        "cwd": str(REPO_ROOT),
+        "preflight": preflight,
+        "form_validation": form_validation,
+        "path_hints": job_path_hints(app, request.job_type, params),
+        "environment_notes": [
+            "Dashboard jobs run with NANOCHAT_LOCAL_ONLY=1.",
+            "W&B is disabled for dashboard jobs.",
+            "Hugging Face hub, transformers, and datasets are set to offline mode.",
+            "The launcher tries to load a Visual Studio x64 build environment on Windows.",
+        ],
+    }
 
 
 @app.get("/api/dashboard/benchmarks")
@@ -1169,14 +1743,18 @@ async def create_dashboard_job(request: JobRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    form_validation = validate_job_params(request.job_type, params, hardware_profile=builder_state().get("hardware_profile"))
+    if not form_validation["ok"]:
+        raise HTTPException(status_code=400, detail={"message": "Job parameters failed validation.", "validation": form_validation})
+    preflight = dashboard_job_preflight(app, request.job_type, params)
     label = request.label or request.job_type.replace("_", " ").title()
     job = app.state.job_manager.start_job(request.job_type, label, command, notes=request.notes, params=params)
     app.state.activity_log.log_event(
         "job_created",
         f"Dashboard launched job {label}",
-        {"job_id": job["id"], "job_type": request.job_type, "params": params},
+        {"job_id": job["id"], "job_type": request.job_type, "params": params, "preflight": preflight},
     )
-    return {"job": job, "resolved_params": params}
+    return {"job": job, "resolved_params": params, "preflight": preflight, "form_validation": form_validation}
 
 
 @app.post("/api/dashboard/jobs/{job_id}/stop")
@@ -1195,6 +1773,16 @@ async def pause_dashboard_job(job_id: str):
         job = app.state.job_manager.pause_job(job_id)
         app.state.activity_log.log_event("job_pause", f"Dashboard pause requested for {job['label']}", {"job_id": job_id})
         return {"job": job}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/dashboard/jobs/{job_id}/resume-preview")
+async def resume_dashboard_job_preview(job_id: str):
+    try:
+        return app.state.job_manager.preview_resume_job(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}") from exc
     except ValueError as exc:
@@ -1372,6 +1960,9 @@ async def runtime_assist(request: RuntimeAssistRequest):
             max_tokens=request.max_tokens,
             system_prompt=system_prompt,
             max_actions=request.max_actions,
+            action_mode=request.action_mode,
+            approved_action=request.approved_action,
+            approved_action_text=request.approved_action_text,
         )
         app.state.activity_log.log_event(
             "chat_assistant",
@@ -1425,6 +2016,188 @@ async def sandbox_delete(request: SandboxDeleteRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/sandbox/sft/validate")
+async def sandbox_sft_validate(request: ValidatePathRequest):
+    try:
+        path = request.path.strip() or "chat_train.jsonl"
+        file_data = app.state.sandbox.read_file(path)
+        report = validate_sft_jsonl_content(file_data.get("content", ""), path=file_data.get("path", path))
+        app.state.activity_log.log_event(
+            "sandbox_sft_validate",
+            f"Validated SFT file {file_data.get('path', path)}",
+            {"path": file_data.get("path", path), "ok": report["ok"], "record_count": report["record_count"]},
+        )
+        return report
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Sandbox file not found: {request.path}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/sandbox/sft/export")
+async def sandbox_sft_export(request: SftDatasetExportRequest):
+    try:
+        source_path = request.source_path.strip() or "chat_train.jsonl"
+        target_path = request.target_path.strip()
+        export_format = (request.format or "parquet").strip().lower()
+        source_file = app.state.sandbox.read_file(source_path)
+        content = source_file.get("content", "")
+        conversations = conversations_from_jsonl(content)
+        if export_format in {"jsonl", "canonical_jsonl"}:
+            if not target_path:
+                target_path = source_path
+            result = app.state.sandbox.write_file(target_path, conversations_to_jsonl(conversations))
+            payload = {
+                "path": result["path"],
+                "source_path": source_file["path"],
+                "format": "jsonl",
+                "conversation_count": len(conversations),
+                "row_count": len(conversations),
+                "size": result["size"],
+                "updated_at": result["updated_at"],
+            }
+        elif export_format == "parquet":
+            if not target_path:
+                target_path = "exports/chat_train.parquet"
+            if Path(target_path).suffix.lower() != ".parquet":
+                raise ValueError("SFT parquet export targets must end with .parquet.")
+            resolved_target = app.state.sandbox._resolve_path(target_path)
+            export_result = write_sft_parquet_file(resolved_target, content, source=request.source or source_file["path"])
+            payload = {
+                **export_result,
+                "path": resolved_target.relative_to(app.state.sandbox.root).as_posix(),
+                "source_path": source_file["path"],
+            }
+        elif export_format in {"preview", "preview_parquet"}:
+            payload = {
+                "path": "",
+                "source_path": source_file["path"],
+                "format": "preview",
+                **preview_sft_parquet_export(content, source=request.source or source_file["path"]),
+            }
+        elif export_format == "preview_jsonl":
+            payload = {
+                "path": "",
+                "source_path": source_file["path"],
+                **preview_sft_jsonl_export(content),
+            }
+        elif export_format == "preview_split_jsonl":
+            payload = {
+                "path": "",
+                "source_path": source_file["path"],
+                **preview_sft_split_export(content, val_ratio=request.val_ratio, seed=request.seed),
+            }
+        elif export_format in {"split", "split_jsonl"}:
+            train_path = target_path or "exports/chat_train.split.jsonl"
+            val_path = request.val_target_path.strip() or "exports/chat_val.jsonl"
+            split = split_conversations(conversations, val_ratio=request.val_ratio, seed=request.seed)
+            train_result = app.state.sandbox.write_file(train_path, conversations_to_jsonl(split["train"]))
+            if split["val"]:
+                val_result = app.state.sandbox.write_file(val_path, conversations_to_jsonl(split["val"]))
+                val_size = val_result["size"]
+                val_updated_at = val_result["updated_at"]
+            else:
+                val_result = {"path": val_path}
+                val_size = 0
+                val_updated_at = None
+            payload = {
+                "path": train_result["path"],
+                "train_path": train_result["path"],
+                "val_path": val_result["path"],
+                "source_path": source_file["path"],
+                "format": "split_jsonl",
+                "conversation_count": split["conversation_count"],
+                "row_count": split["conversation_count"],
+                "train_count": split["train_count"],
+                "val_count": split["val_count"],
+                "train_indices": split["train_indices"],
+                "val_indices": split["val_indices"],
+                "val_ratio": split["val_ratio"],
+                "seed": split["seed"],
+                "train_size": train_result["size"],
+                "val_size": val_size,
+                "updated_at": max(
+                    updated_at for updated_at in [train_result["updated_at"], val_updated_at] if updated_at is not None
+                ),
+            }
+        else:
+            raise ValueError("format must be 'jsonl', 'parquet', 'preview', 'preview_jsonl', 'preview_split_jsonl', or 'split_jsonl'.")
+        app.state.activity_log.log_event(
+            "sandbox_sft_export",
+            f"Exported SFT dataset {source_file['path']} as {payload['format']}",
+            {"source_path": source_file["path"], "target_path": payload.get("path", ""), "format": payload["format"], "row_count": payload.get("row_count", 0)},
+        )
+        return payload
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Sandbox file not found: {request.source_path}") from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/sandbox/chat/export")
+async def sandbox_chat_export(request: ChatTranscriptExportRequest):
+    try:
+        messages = [message.model_dump() for message in request.messages]
+        export_format = request.format.strip().lower()
+        mode = request.mode.strip().lower() if request.mode else "overwrite"
+        if mode not in {"overwrite", "append"}:
+            raise ValueError("mode must be 'overwrite' or 'append'.")
+        if export_format == "json":
+            payload = {
+                "messages": messages,
+                "message_count": len(messages),
+                "exported_at": time.time(),
+                "source": "conversation_lab",
+            }
+            content = json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
+            if request.preview:
+                result = {
+                    "path": request.path,
+                    "size": len(content.encode("utf-8")),
+                    "updated_at": None,
+                }
+            else:
+                result = app.state.sandbox.write_file(request.path, content)
+        elif export_format in {"sft_jsonl", "jsonl"}:
+            conversation = normalize_conversation(messages)
+            content = conversations_to_jsonl([conversation])
+            existing_text = ""
+            if mode == "append" and not request.preview:
+                try:
+                    existing_text = app.state.sandbox._read_file(request.path, log_event=False)["content"]
+                except FileNotFoundError:
+                    existing_text = ""
+            merged_content = merge_jsonl(existing_text, content, mode=mode)
+            if request.preview:
+                result = {
+                    "path": request.path,
+                    "size": len(merged_content.encode("utf-8")),
+                    "updated_at": None,
+                }
+            else:
+                result = app.state.sandbox.write_file(request.path, merged_content)
+        else:
+            raise ValueError("format must be 'json' or 'sft_jsonl'.")
+        if not request.preview:
+            app.state.activity_log.log_event(
+                "chat_transcript_export",
+                f"Exported Conversation Lab transcript to {result['path']}",
+                {"path": result["path"], "format": export_format, "mode": mode, "message_count": len(messages)},
+            )
+        return {
+            "path": result["path"],
+            "format": export_format,
+            "mode": mode,
+            "preview": request.preview,
+            "message_count": len(messages),
+            "content": content,
+            "size": result["size"],
+            "updated_at": result["updated_at"],
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/corpus/status")
 async def corpus_status():
     return app.state.corpus.status()
@@ -1453,6 +2226,129 @@ async def corpus_write(request: SandboxWriteRequest):
             return app.state.corpus.write_parquet_file(request.path, records, mode=request.mode)
         return app.state.corpus.write_file(request.path, request.content)
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/parquet/preview")
+async def corpus_parquet_preview(request: CorpusParquetConvertRequest):
+    try:
+        return app.state.corpus.preview_parquet_conversion(
+            request.content,
+            conversion_mode=request.conversion_mode,
+            source=request.source,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/parquet/write")
+async def corpus_parquet_write(request: CorpusParquetConvertRequest):
+    try:
+        if Path(request.path).suffix.lower() != ".parquet":
+            raise ValueError("Converted parquet files must use a .parquet target path.")
+        result = app.state.corpus.write_converted_parquet_file(
+            request.path,
+            request.content,
+            conversion_mode=request.conversion_mode,
+            mode=request.mode,
+            source=request.source,
+        )
+        app.state.activity_log.log_event(
+            "corpus_parquet_convert",
+            f"Converted corpus content into parquet file {result['path']}",
+            {
+                "path": result["path"],
+                "row_count": result.get("row_count", 0),
+                "conversion_mode": result.get("conversion", {}).get("conversion_mode"),
+                "mode": request.mode,
+            },
+        )
+        return result
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/split/preview")
+async def corpus_split_preview(request: CorpusSplitRequest):
+    try:
+        return app.state.corpus.preview_split_content(
+            request.content,
+            split_mode=request.split_mode,
+            val_ratio=request.val_ratio,
+            seed=request.seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/split/write")
+async def corpus_split_write(request: CorpusSplitRequest):
+    try:
+        result = app.state.corpus.write_split_files(
+            request.train_path,
+            request.val_path,
+            request.content,
+            split_mode=request.split_mode,
+            val_ratio=request.val_ratio,
+            seed=request.seed,
+        )
+        app.state.activity_log.log_event(
+            "corpus_split",
+            f"Split corpus content into {result['train_path']} and {result['val_path']}",
+            {
+                "train_path": result["train_path"],
+                "val_path": result["val_path"],
+                "train_count": result["train_count"],
+                "val_count": result["val_count"],
+                "split_mode": result["split_mode"],
+            },
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/validate")
+async def corpus_validate(request: ValidatePathRequest):
+    try:
+        target_path = request.path.strip()
+        if target_path:
+            resolved = app.state.corpus._resolve_path(target_path)
+        else:
+            resolved = app.state.corpus.root
+        report = validate_corpus_path(resolved, tokenizer_dir=Path(get_base_dir()) / "tokenizer")
+        app.state.activity_log.log_event(
+            "corpus_validate",
+            f"Validated corpus path {report['path']}",
+            {"path": report["path"], "ok": report["ok"], "record_count": report["record_count"], "file_count": report["file_count"]},
+        )
+        return report
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/inspect")
+async def corpus_inspect(request: CorpusInspectRequest):
+    try:
+        payload = inspect_local_corpus(
+            split=request.split,
+            data_dir=app.state.corpus.root,
+            show_docs=request.show_docs,
+            max_chars=request.max_chars,
+            long_doc_chars=request.long_doc_chars,
+        )
+        app.state.activity_log.log_event(
+            "corpus_inspect",
+            f"Inspected {payload['split']} corpus documents",
+            {
+                "split": payload["split"],
+                "file_count": payload["file_count"],
+                "document_count": payload["document_count"],
+                "shown_document_count": payload["shown_document_count"],
+            },
+        )
+        return payload
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1486,6 +2382,31 @@ async def corpus_copy_from_sandbox(request: WorkspaceCopyRequest):
 @app.get("/api/activity/status")
 async def activity_status(limit: int = 80):
     return app.state.activity_log.snapshot(limit=limit)
+
+
+@app.get("/api/report/status")
+async def report_status():
+    return report_status_payload()
+
+
+@app.post("/api/report/reset")
+async def report_reset():
+    report_dir = Path(get_base_dir()) / "report"
+    report = Report(str(report_dir))
+    report.reset()
+    status = report_status_payload()
+    app.state.activity_log.log_event("report_reset", "Reset builder report", {"report_dir": status["report_dir"]})
+    return status
+
+
+@app.post("/api/report/generate")
+async def report_generate():
+    report_dir = Path(get_base_dir()) / "report"
+    report = Report(str(report_dir))
+    report_file = report.generate()
+    status = report_status_payload()
+    app.state.activity_log.log_event("report_generate", "Generated builder report", {"report_file": report_file})
+    return status
 
 
 async def generate_stream(
