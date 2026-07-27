@@ -30,6 +30,38 @@ If you want the short version:
 5. Put a small real corpus in `nanochat-master/local_corpus/`.
 6. Launch the dashboard and follow the guided builder flow.
 
+## Builder Flow Map
+
+```mermaid
+flowchart TB
+    cog["ChattyCog<br/>hosted module tab"] --> wrapper["Outer module wrapper<br/>manifest, visual_load, bridge workspace"]
+    wrapper --> dashboard["nanochat-master dashboard<br/>guided local builder UI"]
+
+    helper["assistant_models/<br/>local GGUF helper"] --> runtime["Bundled llama.cpp runtime<br/>operator assistant lane"]
+    runtime --> dashboard
+
+    corpus["local_corpus/<br/>txt, md, json, jsonl, code, parquet"] --> prep["Corpus prep<br/>validate, inspect, clean, split"]
+    prep --> tokenizer["Tokenizer training<br/>local token vocabulary"]
+    tokenizer --> base["Base-model training<br/>learn general corpus patterns"]
+    base --> sft["Chat SFT<br/>assistant_sandbox JSONL examples"]
+    sft --> checkpoints["Checkpoints<br/>model states to inspect and test"]
+
+    dashboard --> prep
+    dashboard --> tokenizer
+    dashboard --> base
+    dashboard --> sft
+    checkpoints --> test["Checkpoint testing<br/>chat, eval, smoke checks"]
+    test --> dashboard
+
+    dashboard --> logs["builder_logs/<br/>activity, benchmark history, reports"]
+    dashboard -. pause/resume + ECG .-> logs
+    wrapper -. suspend rundown .-> cog
+
+    helper -. helps operate .-> prep
+    helper -. helps review .-> sft
+    helper -. helps interpret .-> test
+```
+
 ## Related Docs
 
 - [GLOSSARY.md](GLOSSARY.md)
