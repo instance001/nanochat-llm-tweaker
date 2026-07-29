@@ -107,6 +107,19 @@ DEFAULT_LOCAL_RUNTIME_SYSTEM_PROMPT = (
 ASSISTANT_ACTION_PATTERN = re.compile(r"<assistant_action>\s*(.*?)\s*</assistant_action>", re.DOTALL)
 MAX_ASSISTANT_ACTIONS = 4
 
+
+def ensure_first_run_dirs() -> None:
+    for path in [
+        Path(get_base_dir()),
+        REPO_ROOT / "assistant_models",
+        REPO_ROOT / "models",
+        REPO_ROOT / "runtime" / "models",
+        REPO_ROOT / "assistant_sandbox",
+        REPO_ROOT / "local_corpus",
+        REPO_ROOT / "builder_logs",
+    ]:
+        path.mkdir(parents=True, exist_ok=True)
+
 parser = argparse.ArgumentParser(description="NanoChat Web Server")
 parser.add_argument("-n", "--num-gpus", type=int, default=1, help="Number of GPUs to use for chat inference")
 parser.add_argument("-i", "--source", type=str, default="sft", help="Source of the chat model: sft|rl")
@@ -1496,6 +1509,7 @@ async def initialize_chat_runtime(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_first_run_dirs()
     app.state.activity_log = ActivityLogManager(REPO_ROOT / "builder_logs" / "activity.jsonl")
     app.state.benchmark_history = BenchmarkHistoryManager(REPO_ROOT / "builder_logs" / "benchmark_history.jsonl")
     app.state.job_manager = BackgroundJobManager(

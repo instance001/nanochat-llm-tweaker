@@ -38,6 +38,8 @@ Recommended beginner install from `nanochat-master/`:
 uv sync --extra cpu --extra parquet
 ```
 
+By default, this fork stores builder-generated data under `builder_data/` beside this file. Set `NANOCHAT_BASE_DIR` if you deliberately want tokenizer files, checkpoints, reports, or saved assistant designs in another location.
+
 On AMD Windows, `torch.cuda.is_available()` should report `False`; CUDA is NVIDIA-only. That is still a valid setup for CPU training plus parquet support.
 
 Optional dashboard browser smoke tests:

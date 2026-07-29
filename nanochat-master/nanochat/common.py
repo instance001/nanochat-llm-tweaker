@@ -6,6 +6,7 @@ import os
 import re
 import logging
 import urllib.request
+from pathlib import Path
 import torch
 import torch.distributed as dist
 from filelock import FileLock
@@ -72,15 +73,13 @@ def is_local_only() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 def get_base_dir():
-    # co-locate nanochat intermediates with other cached data in ~/.cache (by default)
     if os.environ.get("NANOCHAT_BASE_DIR"):
         nanochat_dir = os.environ.get("NANOCHAT_BASE_DIR")
     else:
-        home_dir = os.path.expanduser("~")
-        cache_dir = os.path.join(home_dir, ".cache")
-        nanochat_dir = os.path.join(cache_dir, "nanochat")
+        repo_root = Path(__file__).resolve().parent.parent
+        nanochat_dir = repo_root / "builder_data"
     os.makedirs(nanochat_dir, exist_ok=True)
-    return nanochat_dir
+    return str(nanochat_dir)
 
 def download_file_with_lock(url, filename, postprocess_fn=None):
     """

@@ -723,13 +723,15 @@ When you click `Publish as Active Identity File`, that identity JSONL becomes th
 
 This section shows the exact paths for:
 
-- the cache/base directory
+- the builder data directory
 - tokenizer files
 - active identity file
 - local corpus
 - assistant sandbox
 
 If you are ever unsure where something is stored, look here first.
+
+By default, generated tokenizer files, identity data, checkpoints, reports, and saved assistant designs live in `builder_data/` beside this manual. Set `NANOCHAT_BASE_DIR` only when you deliberately want that generated builder data somewhere else.
 
 ## 6. Stage 1: Local Corpus + Tokenizer
 

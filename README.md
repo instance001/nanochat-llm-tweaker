@@ -30,6 +30,19 @@ If you want the short version:
 5. Put a small real corpus in `nanochat-master/local_corpus/`.
 6. Launch the dashboard and follow the guided builder flow.
 
+## Portable Folder Behavior
+
+By default, the builder keeps its working state inside the `nanochat-master/` folder so unzip-and-run releases remain transparent and movable:
+
+- `builder_data/` for tokenizer files, identity data, checkpoints, reports, and saved assistant designs
+- `assistant_models/` or `models/` for local GGUF/GGML helper models
+- `runtime/models/` for runtime-adjacent model files
+- `assistant_sandbox/` for draft SFT conversations and notes
+- `local_corpus/` for local training corpus files
+- `builder_logs/` for dashboard activity, job state, and benchmark history
+
+The dashboard creates these folders on first run. Set `NANOCHAT_BASE_DIR` only when you deliberately want tokenizer/checkpoint/report data somewhere else.
+
 ## Builder Flow Map
 
 ```mermaid
