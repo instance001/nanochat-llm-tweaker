@@ -254,6 +254,12 @@ Plain English:
 
 - this is the general reading material
 
+You can create this corpus in three ways:
+
+- put your own text/code/JSON/parquet files under `local_corpus`
+- ask the local assistant to draft or improve corpus files
+- import a bounded external dataset slice into local shards with a manifest receipt
+
 #### 2. Identity Data
 
 Used for:
@@ -775,6 +781,68 @@ Put material here that you want the base model to broadly absorb:
 
 Do not put raw chat fine-tuning files here unless you mean to use them as general corpus text.
 
+### External Corpus Import Lane
+
+The dashboard can stream a bounded Hugging Face dataset slice into `local_corpus` before training.
+
+This is not remote training. It is a preparation step:
+
+1. choose or preview an external source
+2. write local train/validation shards
+3. write an import manifest beside the shards
+4. train tokenizer/base jobs from the local files
+
+The normal training path still reads local files only.
+
+Use this lane when:
+
+- you need more general reading material than the assistant should hand-draft
+- you want a reproducible local copy of a selected dataset slice
+- you want provenance for what actually entered training
+
+Start small. For a first import, use something like 1,000 documents, not hundreds of thousands.
+
+The import manifest records:
+
+- dataset id
+- dataset revision, if you pinned one
+- source split
+- text column
+- filters and limits
+- actual document and character counts
+- train/validation ratio
+- local shard paths
+- SHA-256 content hashes
+- license note
+- import timestamp
+- tool version
+
+Typical shard names look like:
+
+```text
+local_corpus/
+  fineweb_import_manifest.json
+  train/fineweb_train_00001.parquet
+  train/fineweb_train_00002.parquet
+  val/fineweb_val_00001.parquet
+```
+
+If you use the CLI from `nanochat-master/`, preview first:
+
+```powershell
+uv run python -m nanochat.builder corpus import-hf --dataset HuggingFaceFW/fineweb-edu --split train --text-column text --limit-docs 20 --preview
+```
+
+Then import a bounded local shard set:
+
+```powershell
+uv run python -m nanochat.builder corpus import-hf --dataset HuggingFaceFW/fineweb-edu --split train --text-column text --limit-docs 1000 --train-val-ratio 0.1 --shard-size-docs 10000 --license-note "Review the dataset card/license before redistribution."
+```
+
+If you know the exact dataset revision or commit, pass it with `--revision`. That makes the manifest much stronger.
+
+The dashboard has matching controls under `External Corpus Import`.
+
 ### Main Controls
 
 - `Corpus Directory`
@@ -791,6 +859,7 @@ Use `.parquet` when:
 - you already have structured records you want to keep in a columnar format
 - you want the corpus to carry metadata fields more cleanly than loose text files
 - you are converting upstream data-prep outputs into a local training corpus
+- you are importing bounded Hugging Face slices into deterministic local shards
 
 Requirements:
 
@@ -1003,6 +1072,9 @@ With assistant actions enabled, it can:
 
 - inspect builder state
 - inspect recent activity
+- recommend corpus sources from a plain-language model goal
+- preview bounded Hugging Face corpus imports
+- request approval to write external corpus imports into local shards with a manifest
 - list corpus files
 - read corpus files
 - write corpus files
@@ -1032,6 +1104,8 @@ That workspace boundary is intentional.
 - "Draft 20 training examples into `chat_train.jsonl` that teach explicit uncertainty."
 - "Create `chat_val.jsonl` with 8 hold-out examples that test team-member behavior."
 - "Read the selected sandbox or corpus file and tell me what is weak or repetitive."
+- "Let's build a model that explains Python errors to beginners. Recommend a small corpus import plan first."
+- "Preview a 1,000 document Hugging Face corpus import for this model goal before writing anything."
 - "Launch chat SFT using the current training files."
 - "Check recent activity and summarize what the last job did."
 

@@ -7,8 +7,11 @@ from __future__ import annotations
 import json
 import os
 import random
+import hashlib
 from pathlib import Path
 from typing import Any
+
+from nanochat.dataset_sources import build_import_manifest, records_to_jsonl, shard_import_records, slugify_import_name, split_records_for_import
 
 try:
     import pyarrow as pa
@@ -695,6 +698,74 @@ class CorpusManager(WorkspaceManager):
             },
         )
         return result
+
+    def write_import_artifacts(
+        self,
+        import_payload: dict[str, Any],
+        *,
+        output_format: str = "parquet",
+        train_val_ratio: float = 0.0,
+        shard_size_docs: int = 10000,
+        license_note: str = "",
+        manifest_path: str = "",
+    ) -> dict[str, Any]:
+        records = import_payload.get("records", [])
+        if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+            raise ValueError("Import artifacts require collected object records.")
+        normalized_format = (output_format or "parquet").strip().lower()
+        if normalized_format not in {"parquet", "jsonl"}:
+            raise ValueError("output_format must be parquet or jsonl.")
+        records_by_split = split_records_for_import(records, train_val_ratio=train_val_ratio)
+        shards = shard_import_records(
+            records_by_split,
+            dataset_id=str(import_payload.get("dataset_id", "hf_import")),
+            source_split=str(import_payload.get("split", "train")),
+            shard_size_docs=shard_size_docs,
+            output_format=normalized_format,
+        )
+        written_shards = []
+        for shard in shards:
+            path = shard["path"]
+            if normalized_format == "jsonl":
+                write_result = self.write_file(path, records_to_jsonl(shard["records"]))
+            else:
+                write_result = self.write_parquet_file(path, shard["records"], mode="overwrite")
+            resolved = self._resolve_path(path)
+            digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            written_shards.append(
+                {
+                    "split": shard["split"],
+                    "path": write_result["path"],
+                    "row_count": shard["row_count"],
+                    "character_count": shard["character_count"],
+                    "size": write_result["size"],
+                    "sha256": digest,
+                }
+            )
+        default_manifest_name = f"{slugify_import_name(str(import_payload.get('dataset_id', 'hf_import')))}_import_manifest.json"
+        manifest_relative_path = manifest_path.strip() or default_manifest_name
+        manifest = build_import_manifest(
+            import_payload,
+            written_shards,
+            train_val_ratio=train_val_ratio,
+            shard_size_docs=shard_size_docs,
+            output_format=normalized_format,
+            license_note=license_note,
+        )
+        manifest_result = self.write_file(manifest_relative_path, json.dumps(manifest, ensure_ascii=True, indent=2) + "\n")
+        manifest_hash = hashlib.sha256(self._resolve_path(manifest_result["path"]).read_bytes()).hexdigest()
+        return {
+            "format": normalized_format,
+            "manifest_path": manifest_result["path"],
+            "manifest_sha256": manifest_hash,
+            "manifest": manifest,
+            "shards": written_shards,
+            "shard_paths": [shard["path"] for shard in written_shards],
+            "row_count": manifest["actual_documents"],
+            "character_count": manifest["actual_characters"],
+            "train_count": sum(shard["row_count"] for shard in written_shards if shard["split"] == "train"),
+            "val_count": sum(shard["row_count"] for shard in written_shards if shard["split"] == "val"),
+        }
 
     def build_context(self, relative_paths: list[str], max_chars: int = 12000) -> str:
         sections = []

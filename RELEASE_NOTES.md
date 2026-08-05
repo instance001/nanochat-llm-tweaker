@@ -1,5 +1,26 @@
 # Release Notes
 
+## External Corpus Import Lane
+
+Date: 2026-08-06
+
+This update adds a middle corpus lane for bringing bounded external dataset slices into the local builder without changing the local training path.
+
+### Highlights
+
+- Added Hugging Face streaming preview/import helpers that collect bounded text records.
+- Added `python -m nanochat.builder corpus import-hf` for previewing or writing imports into `local_corpus`.
+- Added dashboard API endpoints and UI controls for Hugging Face import preview/write.
+- Supports `.parquet` output by default and `.jsonl` output as a no-parquet fallback.
+- Keeps dashboard training jobs local/offline after import; external network access is limited to the import operation.
+- Writes deterministic local shard names such as `fineweb_train_00001.parquet` and `fineweb_val_00001.parquet`.
+- Writes an import manifest with dataset id, revision, split, text column, filters, requested/actual counts, train/val ratio, shard paths, content hashes, license note, timestamp, and tool version.
+- The local GGUF assistant can now recommend corpus sources from a plain-language model goal, preview Hugging Face imports, and request approval to write manifest-backed local shards.
+
+### Verification
+
+- `uv run python -m pytest`: 162 passed, 10 skipped
+
 ## Local Builder Dataset And Launch Workflow Milestone
 
 Date: 2026-07-25

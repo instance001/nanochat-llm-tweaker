@@ -40,6 +40,7 @@ from pydantic import BaseModel, Field
 from nanochat.benchmark_tools import BenchmarkHistoryManager
 from nanochat.common import autodetect_device_type, compute_init, get_base_dir
 from nanochat.dataset import TEXT_SUFFIXES, inspect_local_corpus
+from nanochat.dataset_sources import collect_huggingface_corpus_records, preview_huggingface_corpus_records, recommend_huggingface_corpus_sources
 from nanochat.dashboard_tools import (
     BackgroundJobManager,
     GUIDED_PRESETS,
@@ -304,6 +305,24 @@ class CorpusSplitRequest(BaseModel):
     split_mode: str = "paragraphs"
     val_ratio: float = 0.1
     seed: int = 1337
+
+
+class CorpusHfImportRequest(BaseModel):
+    dataset_id: str
+    config: str = ""
+    revision: str = ""
+    split: str = "train"
+    text_column: str = "text"
+    limit_docs: int = 1000
+    max_chars: int = 0
+    sample_size: int = 12
+    source: str = ""
+    output_format: str = "parquet"
+    train_val_ratio: float = 0.0
+    shard_size_docs: int = 10000
+    license_note: str = ""
+    manifest_path: str = ""
+    trust_remote_code: bool = False
 
 
 class CorpusInspectRequest(BaseModel):
@@ -856,6 +875,9 @@ def render_tool_help() -> str:
         ("get_benchmark_history", '{"limit": 20}'),
         ("autotune_settings", "{}"),
         ("get_corpus_schema", "{}"),
+        ("recommend_corpus_sources", '{"goal": "build a model that explains Python errors to beginners", "max_results": 3}'),
+        ("preview_hf_corpus_import", '{"dataset_id": "HuggingFaceFW/fineweb-edu", "split": "train", "text_column": "text", "limit_docs": 1000}'),
+        ("import_hf_corpus", '{"dataset_id": "HuggingFaceFW/fineweb-edu", "split": "train", "text_column": "text", "limit_docs": 1000, "train_val_ratio": 0.1, "license_note": "Review dataset card/license before redistribution."}'),
         ("list_corpus_files", "{}"),
         ("read_corpus_file", '{"path": "train/reference.txt"}'),
         ("write_corpus_file", '{"path": "train/reference.parquet", "records": [{"text": "..."}, {"text": "..."}]}'),
@@ -885,6 +907,7 @@ def render_tool_help() -> str:
         "Tool restrictions: sandbox file paths must stay inside assistant_sandbox. "
         "corpus file paths must stay inside local_corpus. "
         "parquet corpus writes require structured JSON object records. "
+        "For external corpus requests, recommend sources first, preview bounded imports second, and import only with approval. "
         "draft_sft_data only writes validated conversation JSONL. "
         "launch_job only supports tokenizer_train, tokenizer_eval, base_train, base_eval, benchmark_eval, chat_sft, chat_rl, and chat_eval."
     )
@@ -1009,6 +1032,21 @@ def _coerce_job_params_for_tool(app: FastAPI, job_type: str, params: dict[str, A
     return coerced
 
 
+def _assistant_hf_import_args(args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dataset_id": str(args.get("dataset_id", "")),
+        "config": str(args.get("config", "")),
+        "revision": str(args.get("revision", "")),
+        "split": str(args.get("split", "train")),
+        "text_column": str(args.get("text_column", "text")),
+        "limit_docs": int(args.get("limit_docs", 1000)),
+        "max_chars": int(args.get("max_chars", 0)),
+        "sample_size": int(args.get("sample_size", 12)),
+        "source_label": str(args.get("source", "")),
+        "trust_remote_code": bool(args.get("trust_remote_code", False)),
+    }
+
+
 def execute_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
     if tool_name == "get_builder_state":
         return builder_state()
@@ -1025,6 +1063,34 @@ def execute_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -
         return app.state.benchmark_history.recommend_settings(forms)
     if tool_name == "get_corpus_schema":
         return corpus_schema_payload(app)
+    if tool_name == "recommend_corpus_sources":
+        return recommend_huggingface_corpus_sources(
+            str(args.get("goal", "")),
+            max_results=int(args.get("max_results", 4)),
+        )
+    if tool_name == "preview_hf_corpus_import":
+        return preview_huggingface_corpus_records(**_assistant_hf_import_args(args))
+    if tool_name == "import_hf_corpus":
+        payload = collect_huggingface_corpus_records(**_assistant_hf_import_args(args))
+        result = app.state.corpus.write_import_artifacts(
+            payload,
+            output_format=str(args.get("output_format", "parquet")),
+            train_val_ratio=float(args.get("train_val_ratio", 0.0)),
+            shard_size_docs=int(args.get("shard_size_docs", 10000)),
+            license_note=str(args.get("license_note", "")),
+            manifest_path=str(args.get("manifest_path", "")),
+        )
+        app.state.activity_log.log_event(
+            "assistant_corpus_hf_import",
+            f"Assistant imported {result['row_count']} documents into {len(result['shard_paths'])} shard(s)",
+            {
+                "dataset_id": payload.get("dataset_id", ""),
+                "manifest_path": result["manifest_path"],
+                "shard_paths": result["shard_paths"],
+                "row_count": result["row_count"],
+            },
+        )
+        return {"import": {key: value for key, value in payload.items() if key != "records"}, **result}
     if tool_name == "list_corpus_files":
         return app.state.corpus.status()
     if tool_name == "read_corpus_file":
@@ -1210,6 +1276,7 @@ ASSISTANT_APPROVAL_TOOLS = {
     "draft_corpus_file",
     "delete_corpus_file",
     "copy_sandbox_to_corpus",
+    "import_hf_corpus",
     "draft_sft_data",
     "write_sandbox_file",
     "delete_sandbox_file",
@@ -1283,6 +1350,33 @@ def preview_assistant_tool(app: FastAPI, tool_name: str, args: dict[str, Any]) -
                 "summary": f"Copy sandbox file {args.get('source_path', '')} into corpus file {args.get('target_path', '')}.",
                 "source_path": str(args.get("source_path", "")),
                 "target_path": str(args.get("target_path", "")),
+            }
+        )
+    elif tool_name == "preview_hf_corpus_import":
+        preview.update(
+            {
+                "risk": "network",
+                "requires_approval": False,
+                "summary": f"Preview bounded Hugging Face corpus import: {args.get('dataset_id', '')}",
+                "dataset_id": str(args.get("dataset_id", "")),
+                "split": str(args.get("split", "train")),
+                "limit_docs": int(args.get("limit_docs", 1000)),
+            }
+        )
+    elif tool_name == "import_hf_corpus":
+        preview.update(
+            {
+                "risk": "network_write",
+                "summary": f"Import Hugging Face corpus into local_corpus shards: {args.get('dataset_id', '')}",
+                "dataset_id": str(args.get("dataset_id", "")),
+                "split": str(args.get("split", "train")),
+                "text_column": str(args.get("text_column", "text")),
+                "limit_docs": int(args.get("limit_docs", 1000)),
+                "train_val_ratio": float(args.get("train_val_ratio", 0.0)),
+                "shard_size_docs": int(args.get("shard_size_docs", 10000)),
+                "output_format": str(args.get("output_format", "parquet")),
+                "license_note": str(args.get("license_note", "")),
+                "manifest_path": str(args.get("manifest_path", "")) or "auto",
             }
         )
     elif tool_name == "launch_job":
@@ -2319,6 +2413,74 @@ async def corpus_split_write(request: CorpusSplitRequest):
         )
         return result
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _hf_import_common(request: CorpusHfImportRequest) -> dict[str, Any]:
+    return {
+        "dataset_id": request.dataset_id,
+        "config": request.config,
+        "revision": request.revision,
+        "split": request.split,
+        "text_column": request.text_column,
+        "limit_docs": request.limit_docs,
+        "max_chars": request.max_chars,
+        "sample_size": request.sample_size,
+        "source_label": request.source,
+        "trust_remote_code": request.trust_remote_code,
+    }
+
+
+@app.post("/api/corpus/import-hf/preview")
+async def corpus_import_hf_preview(request: CorpusHfImportRequest):
+    try:
+        payload = preview_huggingface_corpus_records(**_hf_import_common(request))
+        app.state.activity_log.log_event(
+            "corpus_hf_import_preview",
+            f"Previewed Hugging Face corpus {payload['dataset_id']}:{payload['split']}",
+            {
+                "dataset_id": payload["dataset_id"],
+                "split": payload["split"],
+                "row_count": payload["row_count"],
+                "character_count": payload["character_count"],
+            },
+        )
+        return payload
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/corpus/import-hf/write")
+async def corpus_import_hf_write(request: CorpusHfImportRequest):
+    try:
+        payload = collect_huggingface_corpus_records(**_hf_import_common(request))
+        output_format = (request.output_format or "parquet").strip().lower()
+        result = app.state.corpus.write_import_artifacts(
+            payload,
+            output_format=output_format,
+            train_val_ratio=request.train_val_ratio,
+            shard_size_docs=request.shard_size_docs,
+            license_note=request.license_note,
+            manifest_path=request.manifest_path,
+        )
+        response = {
+            **result,
+            "import": {key: value for key, value in payload.items() if key != "records"},
+        }
+        app.state.activity_log.log_event(
+            "corpus_hf_import_write",
+            f"Imported Hugging Face corpus {payload['dataset_id']} into {len(result['shard_paths'])} shard(s)",
+            {
+                "dataset_id": payload["dataset_id"],
+                "split": payload["split"],
+                "manifest_path": result["manifest_path"],
+                "shard_paths": result["shard_paths"],
+                "row_count": payload["row_count"],
+                "character_count": payload["character_count"],
+            },
+        )
+        return response
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

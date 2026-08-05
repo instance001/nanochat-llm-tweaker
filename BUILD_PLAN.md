@@ -144,6 +144,59 @@ Suggested tests:
 - Done: corpus inspection statistics for file types, extracted document counts, token estimates, duplicates, and very-long documents
 - Still useful later: parquet validation behavior without `pyarrow`
 
+### 3A. External Corpus Import Lane
+
+Status: initial implementation added.
+
+**Goal:** Let users bring bounded external corpus slices into the local builder without changing the local/offline training path.
+
+Current state:
+
+- `nanochat.dataset_sources` can stream bounded Hugging Face records.
+- `CorpusManager.write_import_artifacts()` writes deterministic train/validation shards and an import manifest.
+- `python -m nanochat.builder corpus import-hf` supports preview and manifest-backed import.
+- The dashboard exposes `External Corpus Import` controls.
+- Assistant Actions can recommend corpus sources from a plain-language model goal, preview imports, and request approval before writing local shards.
+
+Build:
+
+- Done: preview bounded Hugging Face streaming records.
+- Done: write deterministic shard names:
+  - `train/<dataset>_train_00001.parquet`
+  - `val/<dataset>_val_00001.parquet`
+- Done: write an import manifest with:
+  - dataset id
+  - dataset revision
+  - source split
+  - text column
+  - filters and limits
+  - requested and actual counts
+  - train/validation ratio
+  - shard paths
+  - SHA-256 content hashes
+  - license note
+  - import timestamp
+  - tool version
+- Done: keep actual tokenizer/base training on local files after import.
+- Done: add assistant source recommendation, preview, and approval-gated import actions.
+
+Suggested tests:
+
+- Done: recommendation helper from a short model goal
+- Done: deterministic shard naming
+- Done: manifest receipt fields
+- Done: CLI import path
+- Done: dashboard API import path
+- Done: assistant approval flow for import action
+
+Still useful later:
+
+- curated dataset presets
+- dataset-card/license metadata display
+- source policies for allowed/disallowed providers
+- additional adapters for non-Hugging Face sources
+- richer dashboard preview of manifest diffs before writing
+
 ## Phase 2: Preflight Checks Before Jobs
 
 ### 4. Stage Preflight System

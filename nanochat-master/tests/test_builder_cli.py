@@ -155,6 +155,64 @@ def test_builder_cli_runtime_recommend_prints_bundle_status(tmp_path, capsys):
     assert payload["recommended_config"]["model_path"].endswith("demo.gguf")
 
 
+def test_builder_cli_corpus_import_hf_preview_uses_streaming_helper(monkeypatch, capsys):
+    def fake_preview(**kwargs):
+        assert kwargs["dataset_id"] == "demo/corpus"
+        assert kwargs["limit_docs"] == 5
+        return {"source_type": "huggingface", "dataset_id": "demo/corpus", "row_count": 2}
+
+    monkeypatch.setattr(builder, "preview_huggingface_corpus_records", fake_preview)
+
+    exit_code = builder.main(["corpus", "import-hf", "--dataset", "demo/corpus", "--limit-docs", "5", "--preview"])
+
+    assert exit_code == 0
+    payload = _last_json(capsys.readouterr().out)
+    assert payload["row_count"] == 2
+
+
+def test_builder_cli_corpus_import_hf_writes_jsonl(monkeypatch, tmp_path, capsys):
+    def fake_collect(**kwargs):
+        return {
+            "source_type": "huggingface",
+            "dataset_id": kwargs["dataset_id"],
+            "split": kwargs["split"],
+            "row_count": 1,
+            "character_count": 5,
+            "limit_docs": 1,
+            "max_chars": 0,
+            "skipped_empty_rows": 0,
+            "stopped_reason": "limit_docs",
+            "source_columns": ["text"],
+            "records": [{"text": "alpha", "source": "hf:demo/corpus:train", "row_index": 0}],
+        }
+
+    monkeypatch.setattr(builder, "collect_huggingface_corpus_records", fake_collect)
+    corpus = tmp_path / "corpus"
+
+    exit_code = builder.main(
+        [
+            "corpus",
+            "import-hf",
+            "--dataset",
+            "demo/corpus",
+            "--corpus-dir",
+            str(corpus),
+            "--output-format",
+            "jsonl",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = _last_json(capsys.readouterr().out)
+    assert payload["manifest_path"] == "corpus_import_manifest.json"
+    assert payload["import"]["row_count"] == 1
+    assert payload["shard_paths"] == ["train/corpus_train_00001.jsonl"]
+    assert json.loads((corpus / "train" / "corpus_train_00001.jsonl").read_text(encoding="utf-8").splitlines()[0])["text"] == "alpha"
+    manifest = json.loads((corpus / "corpus_import_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["actual_documents"] == 1
+    assert manifest["shard_paths"] == ["train/corpus_train_00001.jsonl"]
+
+
 @pytest.mark.skipif(pa is None or pq is None, reason="pyarrow is required for parquet corpus CLI tests")
 def test_builder_cli_corpus_convert_writes_parquet(tmp_path, capsys):
     input_file = tmp_path / "notes.md"

@@ -109,6 +109,53 @@ def test_copy_sandbox_text_file_to_corpus_via_api(dashboard_client):
     assert read_response.json()["content"] == "copied from sandbox"
 
 
+def test_corpus_hf_import_write_via_api_uses_local_corpus(monkeypatch, dashboard_client):
+    chat_web = importlib.import_module("scripts.chat_web")
+
+    def fake_collect(**kwargs):
+        return {
+            "source_type": "huggingface",
+            "dataset_id": kwargs["dataset_id"],
+            "dataset_revision": kwargs.get("revision", ""),
+            "split": kwargs["split"],
+            "text_column": kwargs["text_column"],
+            "row_count": 1,
+            "character_count": 5,
+            "limit_docs": 1,
+            "max_chars": 0,
+            "skipped_empty_rows": 0,
+            "stopped_reason": "limit_docs",
+            "source_columns": ["text"],
+            "records": [{"text": "alpha", "source": "hf:demo/corpus:train", "row_index": 0}],
+            "sample_rows": [{"text": "alpha", "source": "hf:demo/corpus:train", "row_index": 0}],
+        }
+
+    monkeypatch.setattr(chat_web, "collect_huggingface_corpus_records", fake_collect)
+
+    response = dashboard_client.post(
+        "/api/corpus/import-hf/write",
+        json={
+            "dataset_id": "demo/corpus",
+            "split": "train",
+            "text_column": "text",
+            "limit_docs": 1,
+            "output_format": "jsonl",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["manifest_path"] == "corpus_import_manifest.json"
+    assert payload["import"]["row_count"] == 1
+    assert payload["shard_paths"] == ["train/corpus_train_00001.jsonl"]
+    read_response = dashboard_client.get("/api/corpus/file", params={"path": "train/corpus_train_00001.jsonl"})
+    assert read_response.status_code == 200
+    assert json.loads(read_response.json()["content"].splitlines()[0])["text"] == "alpha"
+    manifest_response = dashboard_client.get("/api/corpus/file", params={"path": "corpus_import_manifest.json"})
+    assert manifest_response.status_code == 200
+    assert json.loads(manifest_response.json()["content"])["actual_documents"] == 1
+
+
 def test_sandbox_sft_validate_via_api(dashboard_client):
     content = '[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]\n'
     sandbox_write = dashboard_client.post(
@@ -516,6 +563,93 @@ def test_runtime_assist_review_mode_requires_approval_before_write(dashboard_cli
     read_after_approval = dashboard_client.get("/api/sandbox/file", params={"path": "notes/approved.txt"})
     assert read_after_approval.status_code == 200
     assert read_after_approval.json()["content"] == "hello from approval"
+
+
+def test_runtime_assist_can_request_hf_import_with_approval(monkeypatch, dashboard_client):
+    chat_web = importlib.import_module("scripts.chat_web")
+
+    def fake_collect(**kwargs):
+        return {
+            "source_type": "huggingface",
+            "dataset_id": kwargs["dataset_id"],
+            "dataset_revision": kwargs.get("revision", ""),
+            "split": kwargs["split"],
+            "text_column": kwargs["text_column"],
+            "row_count": 1,
+            "character_count": 5,
+            "limit_docs": kwargs["limit_docs"],
+            "max_chars": 0,
+            "skipped_empty_rows": 0,
+            "stopped_reason": "limit_docs",
+            "source_columns": ["text"],
+            "records": [{"text": "alpha", "source": "hf:demo/corpus:train", "row_index": 0}],
+            "sample_rows": [{"text": "alpha", "source": "hf:demo/corpus:train", "row_index": 0}],
+        }
+
+    monkeypatch.setattr(chat_web, "collect_huggingface_corpus_records", fake_collect)
+
+    class FakeRuntime:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages, temperature=0.2, max_tokens=512, system_prompt=""):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "text": '<assistant_action>{"tool":"import_hf_corpus","args":{"dataset_id":"demo/corpus","split":"train","text_column":"text","limit_docs":1,"output_format":"jsonl","train_val_ratio":0,"license_note":"Review demo license."}}</assistant_action>',
+                    "raw": None,
+                }
+            return {"text": "Imported the corpus and wrote a manifest.", "raw": None}
+
+        def status(self):
+            return {"ready": True}
+
+        def stop(self):
+            return {"ready": False}
+
+    dashboard_client.app.state.local_runtime = FakeRuntime()
+
+    response = dashboard_client.post(
+        "/api/runtime/assist",
+        json={
+            "messages": [{"role": "user", "content": "Let's build a model that explains demo text."}],
+            "action_mode": "review",
+            "max_actions": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["approval_required"] is True
+    assert payload["pending_action"]["tool"] == "import_hf_corpus"
+    assert payload["pending_action"]["preview"]["requires_approval"] is True
+    assert payload["pending_action"]["preview"]["risk"] == "network_write"
+
+    approval_response = dashboard_client.post(
+        "/api/runtime/assist",
+        json={
+            "messages": [{"role": "user", "content": "Let's build a model that explains demo text."}],
+            "action_mode": "review",
+            "max_actions": 2,
+            "approved_action": {
+                "tool": payload["pending_action"]["tool"],
+                "args": payload["pending_action"]["args"],
+            },
+            "approved_action_text": payload["pending_action"]["assistant_text"],
+        },
+    )
+
+    assert approval_response.status_code == 200
+    approved = approval_response.json()
+    assert approved["actions"][0]["status"] == "ok"
+    assert approved["actions"][0]["result"]["manifest_path"] == "corpus_import_manifest.json"
+    assert approved["actions"][0]["result"]["shard_paths"] == ["train/corpus_train_00001.jsonl"]
+
+    manifest_response = dashboard_client.get("/api/corpus/file", params={"path": "corpus_import_manifest.json"})
+    assert manifest_response.status_code == 200
+    manifest = json.loads(manifest_response.json()["content"])
+    assert manifest["dataset_id"] == "demo/corpus"
+    assert manifest["license_note"] == "Review demo license."
 
 
 def test_corpus_validate_via_api(dashboard_client):

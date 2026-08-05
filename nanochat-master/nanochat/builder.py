@@ -12,6 +12,7 @@ from typing import Any
 
 from nanochat.common import get_base_dir
 from nanochat.dataset import corpus_summary, get_local_corpus_dir
+from nanochat.dataset_sources import build_import_manifest, collect_huggingface_corpus_records, preview_huggingface_corpus_records, records_to_jsonl
 from nanochat.dashboard_tools import build_job_command
 from nanochat.local_runtime import LocalRuntimeManager
 from nanochat.preflight import run_stage_preflight
@@ -120,6 +121,82 @@ def cmd_corpus_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_corpus_import_hf(args: argparse.Namespace) -> int:
+    corpus_dir = Path(args.corpus_dir).expanduser().resolve() if args.corpus_dir else _default_corpus_dir()
+    common = {
+        "dataset_id": args.dataset,
+        "config": args.config,
+        "revision": args.revision,
+        "split": args.split,
+        "text_column": args.text_column,
+        "limit_docs": args.limit_docs,
+        "max_chars": args.max_chars,
+        "sample_size": args.sample_size,
+        "source_label": args.source,
+        "trust_remote_code": bool(args.trust_remote_code),
+    }
+    if args.preview:
+        _print_json(preview_huggingface_corpus_records(**common))
+        return 0
+
+    payload = collect_huggingface_corpus_records(**common)
+    manager = CorpusManager(corpus_dir)
+    output_path = args.output.strip()
+    output_format = args.output_format.strip().lower()
+    if not output_path:
+        result = manager.write_import_artifacts(
+            payload,
+            output_format=output_format,
+            train_val_ratio=args.train_val_ratio,
+            shard_size_docs=args.shard_size_docs,
+            license_note=args.license_note,
+            manifest_path=args.manifest_path,
+        )
+        _print_json({"import": {key: value for key, value in payload.items() if key != "records"}, **result})
+        return 0
+
+    if output_path.lower().endswith(".jsonl"):
+        result = manager.write_file(output_path, records_to_jsonl(payload["records"]))
+    else:
+        if not output_path.lower().endswith(".parquet"):
+            raise ValueError("Hugging Face imports write .parquet or .jsonl corpus files.")
+        result = manager.write_parquet_file(output_path, payload["records"], mode=args.write_mode)
+    shard_path = result["path"]
+    shard_file = manager._resolve_path(shard_path)
+    import hashlib
+
+    digest = hashlib.sha256(shard_file.read_bytes()).hexdigest()
+    written_shards = [
+        {
+            "split": "train",
+            "path": shard_path,
+            "row_count": payload["row_count"],
+            "character_count": payload["character_count"],
+            "size": result["size"],
+            "sha256": digest,
+        }
+    ]
+    manifest = build_import_manifest(
+        payload,
+        written_shards,
+        train_val_ratio=0.0,
+        shard_size_docs=payload["row_count"],
+        output_format="jsonl" if shard_path.lower().endswith(".jsonl") else "parquet",
+        license_note=args.license_note,
+    )
+    manifest_path = args.manifest_path or "hf_import_manifest.json"
+    manifest_result = manager.write_file(manifest_path, json.dumps(manifest, ensure_ascii=True, indent=2) + "\n")
+    _print_json(
+        {
+            **result,
+            "manifest_path": manifest_result["path"],
+            "manifest": manifest,
+            "import": {key: value for key, value in payload.items() if key != "records"},
+        }
+    )
+    return 0
+
+
 def cmd_sft_validate(args: argparse.Namespace) -> int:
     report = validate_sft_jsonl_file(args.path)
     _print_json(report)
@@ -208,6 +285,31 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_convert.add_argument("--write-mode", default="overwrite", choices=["overwrite", "append"], help="Parquet write mode")
     corpus_convert.add_argument("--source", default="", help="Optional source label stored in generated text records")
     corpus_convert.set_defaults(func=cmd_corpus_convert)
+
+    corpus_import_hf = corpus_subparsers.add_parser(
+        "import-hf",
+        help="Preview or import a bounded Hugging Face streaming dataset slice into local_corpus",
+    )
+    corpus_import_hf.add_argument("--dataset", required=True, help="Hugging Face dataset id, e.g. HuggingFaceFW/fineweb")
+    corpus_import_hf.add_argument("--config", default="", help="Optional dataset config/name")
+    corpus_import_hf.add_argument("--revision", default="", help="Optional dataset revision/commit for reproducibility")
+    corpus_import_hf.add_argument("--split", default="train", help="Dataset split, default=train")
+    corpus_import_hf.add_argument("--text-column", default="text", help="Text column or dotted path, default=text")
+    corpus_import_hf.add_argument("--limit-docs", type=int, default=1000, help="Maximum usable documents to import")
+    corpus_import_hf.add_argument("--max-chars", type=int, default=0, help="Optional total character cap, 0 = no cap")
+    corpus_import_hf.add_argument("--sample-size", type=int, default=12, help="Preview sample rows to include")
+    corpus_import_hf.add_argument("--source", default="", help="Optional source label stored in generated corpus rows")
+    corpus_import_hf.add_argument("--output", default="", help="Optional legacy single-file .parquet or .jsonl path under local_corpus")
+    corpus_import_hf.add_argument("--output-format", default="parquet", choices=["parquet", "jsonl"], help="Shard output format when --output is omitted")
+    corpus_import_hf.add_argument("--corpus-dir", default="", help="Override output corpus directory")
+    corpus_import_hf.add_argument("--write-mode", default="overwrite", choices=["overwrite", "append"], help="Parquet write mode")
+    corpus_import_hf.add_argument("--train-val-ratio", type=float, default=0.0, help="Validation ratio for deterministic local shard split")
+    corpus_import_hf.add_argument("--shard-size-docs", type=int, default=10000, help="Maximum documents per deterministic local shard")
+    corpus_import_hf.add_argument("--license-note", default="", help="License/provenance note to store in the import manifest")
+    corpus_import_hf.add_argument("--manifest-path", default="", help="Optional manifest path under local_corpus")
+    corpus_import_hf.add_argument("--preview", action="store_true", help="Preview records without writing to local_corpus")
+    corpus_import_hf.add_argument("--trust-remote-code", action="store_true", help="Allow dataset loading code when the dataset requires it")
+    corpus_import_hf.set_defaults(func=cmd_corpus_import_hf)
 
     sft = subparsers.add_parser("sft", help="SFT dataset utilities")
     sft_subparsers = sft.add_subparsers(dest="sft_command", required=True)

@@ -5,6 +5,7 @@ LLM Tweaker Builder is a local-first fork built around Andrej Karpathy's `nanoch
 Notable local-builder additions include:
 
 - `.parquet` corpus support alongside the original text/code path
+- bounded Hugging Face streaming imports into local corpus files
 - hardware-fit runtime defaults for consumer machines
 - pause and resume for long local jobs
 - a dashboard ECG window that gives a live visual answer to whether the machine is active, idle, or potentially stalled
@@ -29,6 +30,23 @@ If you want the short version:
 4. Put a helper `.gguf` in `nanochat-master/Assistant_models/`.
 5. Put a small real corpus in `nanochat-master/local_corpus/`.
 6. Launch the dashboard and follow the guided builder flow.
+
+The corpus lane can also import a bounded Hugging Face dataset slice into
+deterministic local shards plus an import manifest, then run the normal local
+tokenizer/base training path. The local GGUF assistant can help choose and
+preview an external corpus from a short model goal before asking permission to
+write those local shards.
+
+Example imported corpus artifact:
+
+```text
+nanochat-master/local_corpus/
+  fineweb_import_manifest.json
+  train/fineweb_train_00001.parquet
+  val/fineweb_val_00001.parquet
+```
+
+The manifest records source, limits, counts, shard paths, content hashes, license note, timestamp, and tool version.
 
 ## Portable Folder Behavior
 

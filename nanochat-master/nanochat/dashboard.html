@@ -2226,6 +2226,68 @@
                             <button class="btn primary" id="writeCorpusSplitBtn">Write Train/Val Split</button>
                         </div>
                     </div>
+                    <div class="note-box" style="margin-top: 12px;">
+                        <div><strong>External Corpus Import</strong></div>
+                        <div style="margin-top: 8px;">Stream a bounded Hugging Face dataset slice into local_corpus, then train from the local file.</div>
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="field">
+                                <label for="hfDatasetId">Dataset Id</label>
+                                <input id="hfDatasetId" type="text" placeholder="HuggingFaceFW/fineweb">
+                            </div>
+                            <div class="field">
+                                <label for="hfDatasetConfig">Config</label>
+                                <input id="hfDatasetConfig" type="text" placeholder="optional">
+                            </div>
+                            <div class="field">
+                                <label for="hfDatasetRevision">Revision</label>
+                                <input id="hfDatasetRevision" type="text" placeholder="optional commit/tag">
+                            </div>
+                            <div class="field">
+                                <label for="hfDatasetSplit">Split</label>
+                                <input id="hfDatasetSplit" type="text" value="train">
+                            </div>
+                            <div class="field">
+                                <label for="hfTextColumn">Text Column</label>
+                                <input id="hfTextColumn" type="text" value="text">
+                            </div>
+                            <div class="field">
+                                <label for="hfLimitDocs">Max Docs</label>
+                                <input id="hfLimitDocs" type="number" min="1" max="1000000" value="1000">
+                            </div>
+                            <div class="field">
+                                <label for="hfMaxChars">Max Chars</label>
+                                <input id="hfMaxChars" type="number" min="0" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="hfTrainValRatio">Val Ratio</label>
+                                <input id="hfTrainValRatio" type="number" min="0" max="0.9" step="0.01" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="hfShardSizeDocs">Shard Docs</label>
+                                <input id="hfShardSizeDocs" type="number" min="1" value="10000">
+                            </div>
+                            <div class="field">
+                                <label for="hfOutputFormat">Format</label>
+                                <select id="hfOutputFormat">
+                                    <option value="parquet">parquet</option>
+                                    <option value="jsonl">jsonl</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="hfManifestPath">Manifest Path</label>
+                                <input id="hfManifestPath" type="text" placeholder="auto">
+                            </div>
+                            <div class="field full">
+                                <label for="hfLicenseNote">License Note</label>
+                                <input id="hfLicenseNote" type="text" placeholder="Review the dataset card/license before redistribution.">
+                            </div>
+                        </div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <button class="btn secondary" id="previewHfImportBtn">Preview Import</button>
+                            <button class="btn primary" id="writeHfImportBtn">Write Imported Corpus</button>
+                        </div>
+                        <textarea id="hfImportPreview" class="log-box" readonly style="margin-top: 12px; min-height: 140px;" placeholder="External corpus preview appears here before writing."></textarea>
+                    </div>
                     <div class="button-row" style="margin-top: 12px;">
                         <button class="btn primary" id="saveCorpusBtn">Save File</button>
                         <button class="btn secondary" id="loadCorpusBtn">Load File</button>
@@ -2379,6 +2441,19 @@
         const corpusSplitModeEl = document.getElementById("corpusSplitMode");
         const corpusSplitValRatioEl = document.getElementById("corpusSplitValRatio");
         const corpusSplitSeedEl = document.getElementById("corpusSplitSeed");
+        const hfDatasetIdEl = document.getElementById("hfDatasetId");
+        const hfDatasetConfigEl = document.getElementById("hfDatasetConfig");
+        const hfDatasetRevisionEl = document.getElementById("hfDatasetRevision");
+        const hfDatasetSplitEl = document.getElementById("hfDatasetSplit");
+        const hfTextColumnEl = document.getElementById("hfTextColumn");
+        const hfLimitDocsEl = document.getElementById("hfLimitDocs");
+        const hfMaxCharsEl = document.getElementById("hfMaxChars");
+        const hfTrainValRatioEl = document.getElementById("hfTrainValRatio");
+        const hfShardSizeDocsEl = document.getElementById("hfShardSizeDocs");
+        const hfOutputFormatEl = document.getElementById("hfOutputFormat");
+        const hfManifestPathEl = document.getElementById("hfManifestPath");
+        const hfLicenseNoteEl = document.getElementById("hfLicenseNote");
+        const hfImportPreviewEl = document.getElementById("hfImportPreview");
         const benchmarkSummaryEl = document.getElementById("benchmarkSummary");
         const activityMetaEl = document.getElementById("activityMeta");
         const activityLogEl = document.getElementById("activityLog");
@@ -4440,6 +4515,114 @@
             }
         }
 
+        function buildHfImportPayload() {
+            const datasetId = hfDatasetIdEl.value.trim();
+            const limitDocs = Number.parseInt(hfLimitDocsEl.value || "1000", 10);
+            const maxChars = Number.parseInt(hfMaxCharsEl.value || "0", 10);
+            const trainValRatio = Number(hfTrainValRatioEl.value || 0);
+            const shardSizeDocs = Number.parseInt(hfShardSizeDocsEl.value || "10000", 10);
+            if (!datasetId) {
+                throw new Error("Enter a Hugging Face dataset id first.");
+            }
+            if (!Number.isFinite(limitDocs) || limitDocs < 1 || limitDocs > 1000000) {
+                throw new Error("Max docs must be between 1 and 1000000.");
+            }
+            if (!Number.isFinite(maxChars) || maxChars < 0) {
+                throw new Error("Max chars must be 0 or greater.");
+            }
+            if (!Number.isFinite(trainValRatio) || trainValRatio < 0 || trainValRatio >= 1) {
+                throw new Error("Validation ratio must be at least 0 and less than 1.");
+            }
+            if (!Number.isFinite(shardSizeDocs) || shardSizeDocs < 1) {
+                throw new Error("Shard docs must be 1 or greater.");
+            }
+            return {
+                dataset_id: datasetId,
+                config: hfDatasetConfigEl.value.trim(),
+                revision: hfDatasetRevisionEl.value.trim(),
+                split: hfDatasetSplitEl.value.trim() || "train",
+                text_column: hfTextColumnEl.value.trim() || "text",
+                limit_docs: limitDocs,
+                max_chars: maxChars,
+                sample_size: 12,
+                source: "",
+                output_format: hfOutputFormatEl.value || "parquet",
+                train_val_ratio: trainValRatio,
+                shard_size_docs: shardSizeDocs,
+                license_note: hfLicenseNoteEl.value.trim(),
+                manifest_path: hfManifestPathEl.value.trim(),
+            };
+        }
+
+        function renderHfImportPreview(result) {
+            hfImportPreviewEl.value = [
+                `Dataset: ${result.dataset_id}${result.config ? ` / ${result.config}` : ""}`,
+                `Split: ${result.split}`,
+                `Text column: ${result.text_column || "auto"}`,
+                `Rows: ${result.row_count}`,
+                `Characters: ${result.character_count}`,
+                `Skipped empty rows: ${result.skipped_empty_rows}`,
+                `Stopped: ${result.stopped_reason}`,
+                `Source columns: ${(result.source_columns || []).join(", ") || "unknown"}`,
+                "",
+                JSON.stringify(result.sample_rows || [], null, 2),
+                "",
+                (result.notes || []).join("\n"),
+            ].join("\n");
+        }
+
+        function renderHfImportWriteResult(result) {
+            const manifest = result.manifest || {};
+            hfImportPreviewEl.value = [
+                `Imported ${result.row_count} documents into ${result.shard_paths.length} local shard(s). Training remains offline.`,
+                `Manifest: ${result.manifest_path}`,
+                `Train/val: ${result.train_count}/${result.val_count}`,
+                `Characters: ${result.character_count}`,
+                "",
+                `Shard paths:`,
+                ...(result.shard_paths || []).map((path) => `- ${path}`),
+                "",
+                `Content hashes:`,
+                JSON.stringify(manifest.content_hashes || {}, null, 2),
+                "",
+                `Receipt:`,
+                JSON.stringify(manifest, null, 2),
+            ].join("\n");
+        }
+
+        async function previewHfImport() {
+            try {
+                const preview = await api("/api/corpus/import-hf/preview", {
+                    method: "POST",
+                    body: buildHfImportPayload(),
+                });
+                renderHfImportPreview(preview);
+                showNotice(`Previewed ${preview.row_count} external corpus row(s).`, "good");
+            } catch (error) {
+                hfImportPreviewEl.value = `[external import preview error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
+        async function writeHfImport() {
+            try {
+                const result = await api("/api/corpus/import-hf/write", {
+                    method: "POST",
+                    body: buildHfImportPayload(),
+                });
+                renderHfImportWriteResult(result);
+                state.selectedCorpusPath = result.manifest_path;
+                corpusPathEl.value = result.manifest_path;
+                corpusMetaEl.textContent = `Imported ${result.row_count} documents into ${result.shard_paths.length} local shard(s). Training remains offline.`;
+                showNotice(`Imported ${result.row_count} documents into ${result.shard_paths.length} local shard(s).`, "good");
+                await refreshBootstrap();
+                await loadCorpusFile(result.manifest_path);
+            } catch (error) {
+                hfImportPreviewEl.value = `[external import write error] ${error.message}`;
+                showNotice(error.message, "bad");
+            }
+        }
+
         async function deleteCorpusFile() {
             const targetPath = corpusPathEl.value.trim();
             if (!targetPath) {
@@ -5882,6 +6065,8 @@
             document.getElementById("writeParquetBtn").addEventListener("click", writeParquetConversion);
             document.getElementById("previewCorpusSplitBtn").addEventListener("click", previewCorpusSplit);
             document.getElementById("writeCorpusSplitBtn").addEventListener("click", writeCorpusSplit);
+            document.getElementById("previewHfImportBtn").addEventListener("click", previewHfImport);
+            document.getElementById("writeHfImportBtn").addEventListener("click", writeHfImport);
             corpusPathEl.addEventListener("input", () => {
                 if (corpusPathEl.value.trim() !== state.selectedCorpusPath) {
                     setCorpusEditorMode("text");

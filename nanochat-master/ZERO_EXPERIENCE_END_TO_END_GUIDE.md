@@ -266,7 +266,15 @@ nanochat-master\assistant_models\
 
 The base model and tokenizer need some real corpus data.
 
-Put it in:
+You have three options:
+
+1. put your own files into `local_corpus`
+2. ask the local assistant to help draft small corpus files
+3. import a bounded Hugging Face dataset slice into local shards
+
+For your first run, keep this small. You are proving the workflow before spending time on a large training pile.
+
+If you already have files, put them in:
 
 ```text
 nanochat-master\local_corpus\
@@ -293,8 +301,59 @@ Examples of acceptable corpus content:
 What not to do:
 
 - do not leave `local_corpus/` empty
-- do not expect the builder to download a corpus for you
+- do not import a huge external dataset before you have proven the pipeline works
 - do not start with millions of files if you are just proving the loop works
+
+### Optional: Import A Bounded External Corpus
+
+The dashboard includes an `External Corpus Import` area.
+
+Plain English:
+
+- it streams a limited slice from Hugging Face
+- it writes local train/validation shards under `local_corpus`
+- it writes a manifest receipt that records what was imported
+- tokenizer and base training still read local files afterward
+
+The manifest matters because `100k FineWeb documents` is not enough detail six months later. The receipt records the dataset id, revision, split, text column, limits, actual counts, shard paths, content hashes, license note, timestamp, and tool version.
+
+Typical output:
+
+```text
+nanochat-master\local_corpus\
+  fineweb_import_manifest.json
+  train\fineweb_train_00001.parquet
+  val\fineweb_val_00001.parquet
+```
+
+Good first dashboard settings:
+
+- Dataset Id: `HuggingFaceFW/fineweb-edu`
+- Split: `train`
+- Text Column: `text`
+- Max Docs: `1000`
+- Val Ratio: `0.1`
+- Format: `parquet`
+
+If you prefer the CLI, preview first:
+
+```powershell
+uv run python -m nanochat.builder corpus import-hf --dataset HuggingFaceFW/fineweb-edu --limit-docs 20 --preview
+```
+
+Then write local shards:
+
+```powershell
+uv run python -m nanochat.builder corpus import-hf --dataset HuggingFaceFW/fineweb-edu --limit-docs 1000 --train-val-ratio 0.1 --license-note "Review dataset card/license before redistribution."
+```
+
+If you are unsure what to import, ask the local assistant:
+
+```text
+Let's build a model that explains Python errors to beginners. Recommend a small corpus import plan first.
+```
+
+The assistant can recommend sources, preview a bounded import, and ask permission before writing local shards.
 
 Beginner-friendly search ideas if you are not sure what a corpus should look like:
 

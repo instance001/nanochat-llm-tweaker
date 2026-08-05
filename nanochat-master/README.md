@@ -20,6 +20,8 @@ This fork adds a guided local dashboard and local-runtime workflow on top of ups
 For day-to-day use in this repo, the most important local-fork behaviors are:
 
 - local corpus ingestion supports both plain text/code files and `.parquet` files when `pyarrow` is installed
+- bounded Hugging Face corpus imports can write deterministic local shards plus an import manifest before training
+- the local GGUF assistant can recommend and preview corpus imports from a plain-language model goal, then ask approval before writing local shards
 - parquet support is packaged as an optional extra: run `uv sync --extra parquet` from `nanochat-master/` to enable parquet corpus and SFT export flows
 - the Windows launcher now auto-detects and loads the Visual Studio x64 build environment when it is available, which helps local CPU `torch.compile` runs succeed more reliably
 - the dashboard includes hardware-fit guidance so smaller local machines can start from safer settings instead of immediately overcommitting RAM or VRAM
@@ -37,6 +39,14 @@ Recommended beginner install from `nanochat-master/`:
 ```powershell
 uv sync --extra cpu --extra parquet
 ```
+
+Example bounded external corpus import from `nanochat-master/`:
+
+```powershell
+uv run python -m nanochat.builder corpus import-hf --dataset HuggingFaceFW/fineweb-edu --limit-docs 1000 --train-val-ratio 0.1 --license-note "Review dataset card/license before redistribution."
+```
+
+This writes local corpus shards and an import manifest. Tokenizer/base training still reads local files afterward.
 
 By default, this fork stores builder-generated data under `builder_data/` beside this file. Set `NANOCHAT_BASE_DIR` if you deliberately want tokenizer files, checkpoints, reports, or saved assistant designs in another location.
 

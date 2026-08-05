@@ -21,6 +21,7 @@ These are direct command-line entry points currently exposed by scripts or modul
 | `python -m nanochat.builder status` | Print local builder status. | `--corpus-dir`, `--sandbox-dir` |
 | `python -m nanochat.builder corpus validate` | Validate a corpus file or directory. | optional path, default local corpus |
 | `python -m nanochat.builder corpus convert` | Convert text/markdown/JSON/JSONL input into corpus parquet. | `--input`, `--output`, `--corpus-dir`, `--mode`, `--write-mode`, `--source` |
+| `python -m nanochat.builder corpus import-hf` | Preview or import a bounded Hugging Face streaming dataset slice into deterministic local shards plus an import manifest. | `--dataset`, `--config`, `--revision`, `--split`, `--text-column`, `--limit-docs`, `--max-chars`, `--sample-size`, `--source`, `--output`, `--output-format`, `--corpus-dir`, `--write-mode`, `--train-val-ratio`, `--shard-size-docs`, `--license-note`, `--manifest-path`, `--preview`, `--trust-remote-code` |
 | `python -m nanochat.builder sft validate` | Validate an SFT JSONL conversation file. | path |
 | `python -m nanochat.builder job preflight` | Run launch preflight for a dashboard job from CLI. | `--job-type`, `--params-json`, `--params-file`, `--base-dir`, `--corpus-dir`, `--sandbox-dir` |
 | `python -m nanochat.builder job preview` | Preview a dashboard job command and preflight from CLI. | `--job-type`, `--params-json`, `--params-file`, `--base-dir`, `--corpus-dir`, `--sandbox-dir` |
@@ -99,9 +100,10 @@ These are dashboard-facing functions exposed through `nanochat/dashboard.html` a
 | List Corpus Files | `GET /api/corpus/files` | Lists files under `local_corpus`. |
 | Load Corpus File | `GET /api/corpus/file` | Reads text/JSON/JSONL or previews parquet files. |
 | Save Corpus File | `POST /api/corpus/write` | Writes text/JSON/JSONL or structured parquet records. |
+| Preview/Import Hugging Face Corpus | `POST /api/corpus/import-hf/preview`, `POST /api/corpus/import-hf/write` | Streams a bounded external dataset slice into deterministic local_corpus parquet/JSONL shards plus an import manifest, then normal training remains local. |
 | Delete Corpus File | `POST /api/corpus/delete` | Deletes a scoped corpus file. |
 | Copy Sandbox To Corpus | `POST /api/corpus/copy-from-sandbox` | Copies sandbox content into corpus, with parquet conversion support. |
-| Assistant Actions | `POST /api/runtime/assist` | Local GGUF can call scoped actions for builder state, activity, benchmark history, autotune, corpus files, sandbox files, SFT drafting, job launch, job status, and job stop. |
+| Assistant Actions | `POST /api/runtime/assist` | Local GGUF can call scoped actions for builder state, activity, benchmark history, autotune, corpus source recommendation, Hugging Face import preview/write, corpus files, sandbox files, SFT drafting, job launch, job status, and job stop. |
 
 ## GUI Does Not Match CLI Functions
 
@@ -181,6 +183,8 @@ This section is a working backlog of places where functions exist but are incomp
 | SFT dataset creation | The GUI and assistant actions draft SFT data as JSONL conversation files under `assistant_sandbox`, and the Sandbox Editor can preview, normalize, export, and split those files. Conversation Lab can export full or selected turns as SFT JSONL. | Add transcript import for alternate external chat formats and more ergonomic preview modals if the simple metadata preview becomes too cramped. |
 | SFT parquet output | Initial GUI/API export exists for validated SFT conversations, writing one conversation per parquet row with serialized messages and summary columns. The Sandbox Editor can load exported parquet files as preview-only sample rows. `pyarrow` is available through the `parquet` extra. | Add optional schema variants for downstream tools. |
 | Corpus parquet creation | Initial GUI/API converter now previews and writes `.parquet` files from paragraphs, lines, markdown sections, JSONL objects, or JSON object/array input. | Extend with richer validation, append-mode UI, saved conversion presets, and larger dataset statistics. |
+| External corpus import | CLI/API/dashboard Hugging Face streaming import exists. It previews bounded slices and writes deterministic local_corpus shards plus an import manifest with dataset id, revision, split, limits, counts, shard paths, hashes, license note, timestamp, and tool version. | Add curated dataset presets, dataset-card/license display, and support for additional source adapters. |
+| Assistant-guided corpus sourcing | The local GGUF assistant can recommend Hugging Face corpus sources from a plain-language model goal, preview bounded imports, and request approval to write manifest-backed local shards. | Expand recommendations with curated source presets, licensing metadata, and user-selectable source policies. |
 | Dataset validation | Initial GUI/API validation exists for sandbox SFT JSONL files and corpus paths/files, including row/document counts, malformed line errors, split-folder warnings, unsupported/ignored file reporting, exact duplicate detection, schema hints, rough token estimates, and active-tokenizer counts when a tokenizer is available. | Extend with near-duplicate detection if needed. |
 | Train/val split creation | GUI/API can split SFT JSONL files and current Corpus Editor content into deterministic train/val outputs with seed and ratio controls. | Add whole-folder corpus rebalancing, split manifests, and richer preview modals. |
 | Dataset preview depth | GUI can inspect extracted documents using the same `nanochat.dataset` reader as tokenizer/base training. | Add side-by-side raw file vs extracted document comparison if needed. |

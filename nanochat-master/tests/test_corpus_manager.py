@@ -197,6 +197,48 @@ def test_corpus_manager_writes_split_files(tmp_path):
     assert len((tmp_path / "val" / "split.txt").read_text(encoding="utf-8").strip().split("\n\n")) == 1
 
 
+def test_corpus_manager_writes_import_shards_and_manifest(tmp_path):
+    manager = CorpusManager(tmp_path)
+    payload = {
+        "source_type": "huggingface",
+        "dataset_id": "HuggingFaceFW/fineweb",
+        "dataset_revision": "abc123",
+        "config": "",
+        "split": "train",
+        "text_column": "text",
+        "limit_docs": 5,
+        "max_chars": 0,
+        "row_count": 5,
+        "character_count": 25,
+        "skipped_empty_rows": 0,
+        "stopped_reason": "limit_docs",
+        "source_columns": ["text"],
+        "records": [{"text": f"doc {index}", "row_index": index} for index in range(5)],
+    }
+
+    result = manager.write_import_artifacts(
+        payload,
+        output_format="jsonl",
+        train_val_ratio=0.4,
+        shard_size_docs=2,
+        license_note="Check dataset card.",
+    )
+
+    assert result["manifest_path"] == "fineweb_import_manifest.json"
+    assert result["shard_paths"] == [
+        "train/fineweb_train_00001.jsonl",
+        "train/fineweb_train_00002.jsonl",
+        "val/fineweb_val_00001.jsonl",
+    ]
+    assert result["train_count"] == 3
+    assert result["val_count"] == 2
+    manifest = json.loads((tmp_path / "fineweb_import_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["dataset_revision"] == "abc123"
+    assert manifest["actual_documents"] == 5
+    assert manifest["license_note"] == "Check dataset card."
+    assert set(manifest["content_hashes"]) == set(result["shard_paths"])
+
+
 def test_corpus_manager_converts_markdown_sections_to_parquet_records(tmp_path):
     manager = CorpusManager(tmp_path)
 
