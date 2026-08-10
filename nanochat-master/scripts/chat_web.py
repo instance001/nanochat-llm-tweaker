@@ -107,19 +107,43 @@ DEFAULT_LOCAL_RUNTIME_SYSTEM_PROMPT = (
 )
 ASSISTANT_ACTION_PATTERN = re.compile(r"<assistant_action>\s*(.*?)\s*</assistant_action>", re.DOTALL)
 MAX_ASSISTANT_ACTIONS = 4
+FIRST_RUN_REPO_DIRS = [
+    "assistant_models",
+    "models",
+    "runtime",
+    "runtime/windows",
+    "runtime/models",
+    "assistant_sandbox",
+    "local_corpus",
+    "local_corpus/train",
+    "local_corpus/val",
+    "builder_logs",
+]
+FIRST_RUN_BASE_DIRS = [
+    "",
+    "tokenizer",
+    "base_checkpoints",
+    "chatsft_checkpoints",
+    "chatrl_checkpoints",
+    "builder_designs",
+    "report",
+]
+
+
+def _layout_path(root: Path, relative: str) -> Path:
+    path = root
+    for component in relative.split("/"):
+        if component:
+            path = path / component
+    return path
 
 
 def ensure_first_run_dirs() -> None:
-    for path in [
-        Path(get_base_dir()),
-        REPO_ROOT / "assistant_models",
-        REPO_ROOT / "models",
-        REPO_ROOT / "runtime" / "models",
-        REPO_ROOT / "assistant_sandbox",
-        REPO_ROOT / "local_corpus",
-        REPO_ROOT / "builder_logs",
-    ]:
-        path.mkdir(parents=True, exist_ok=True)
+    base_dir = Path(get_base_dir())
+    for relative in FIRST_RUN_BASE_DIRS:
+        _layout_path(base_dir, relative).mkdir(parents=True, exist_ok=True)
+    for relative in FIRST_RUN_REPO_DIRS:
+        _layout_path(REPO_ROOT, relative).mkdir(parents=True, exist_ok=True)
 
 parser = argparse.ArgumentParser(description="NanoChat Web Server")
 parser.add_argument("-n", "--num-gpus", type=int, default=1, help="Number of GPUs to use for chat inference")
