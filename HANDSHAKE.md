@@ -12,9 +12,9 @@ LLM Tweaker Builder is a local-only dashboard for training and testing your own 
 ## Inputs this module expects (required)
 
 - Local corpus files in `nanochat-master/local_corpus/`
-- Local GGUF helper models in `nanochat-master/Assistant_models/`
+- Local GGUF helper models in `nanochat-master/assistant_models/`
 - Design and identity choices entered in the dashboard
-- Optional draft chat datasets and notes in `nanochat-master/Assistant_sandbox/`
+- Optional draft chat datasets and notes in `nanochat-master/assistant_sandbox/`
 - Local Python environment with required packages already installed
 
 ## Outputs this module produces (required)
@@ -22,7 +22,7 @@ LLM Tweaker Builder is a local-only dashboard for training and testing your own 
 - Tokenizer artifacts created by the builder pipeline
 - Base-model, SFT, and RL checkpoints created by local jobs
 - Local logs in `nanochat-master/builder_logs/`
-- Draft and published training data in `nanochat-master/Assistant_sandbox/`
+- Draft and published training data in `nanochat-master/assistant_sandbox/`
 - A working browser dashboard for launching, monitoring, and testing the builder workflow
 
 ## Suspend rundown template (required)
@@ -31,7 +31,7 @@ LLM Tweaker Builder is a local-only dashboard for training and testing your own 
 > **What changed:** Corpus/design edits, jobs launched or completed, and any new checkpoints or datasets created.
 > **Open questions:** Missing files, package issues, hardware limits, or unclear next training decisions.
 > **Next action:** The next concrete builder step such as draft data, train tokenizer, run base training, run SFT, or test a checkpoint.
-> **Artifacts:** `nanochat-master/builder_logs/activity.jsonl`, `nanochat-master/builder_logs/*`, `nanochat-master/Assistant_sandbox/*`, `nanochat-master/local_corpus/*`
+> **Artifacts:** `nanochat-master/builder_logs/activity.jsonl`, `nanochat-master/builder_logs/*`, `nanochat-master/assistant_sandbox/*`, `nanochat-master/local_corpus/*`
 
 ## Portable bridge note
 

@@ -264,7 +264,7 @@ You can create this corpus in three ways:
 
 Used for:
 
-- teaching the assistant how it should think about its role and behavior
+- teaching the assistant how it should describe its role and behave in conversation
 
 Plain English:
 

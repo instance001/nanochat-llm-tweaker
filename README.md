@@ -27,7 +27,7 @@ If you want the short version:
 1. Put this `llm-tweaker` folder into your own `chatty-cog/modules/` folder.
 2. In ChattyCog, use `Modules -> Rescan modules`.
 3. Open `LLM Tweaker Builder`.
-4. Put a helper `.gguf` in `nanochat-master/Assistant_models/`.
+4. Put a helper `.gguf` in `nanochat-master/assistant_models/`.
 5. Put a small real corpus in `nanochat-master/local_corpus/`.
 6. Launch the dashboard and follow the guided builder flow.
 
